@@ -1,0 +1,32 @@
+# 의존성 모듈 및 빌드 결과물
+node_modules/
+.next/
+
+# 환경 변수 및 비밀 키 (보안 필수)
+.env*
+!.env.example
+
+# 의존성 모듈 및 빌드 결과물
+node_modules/
+.next/
+out/
+dist/
+
+# 환경 변수 및 비밀 키 (보안 필수)
+.env*
+
+# 로그
+*.log
+npm-debug.log*
+
+# 에디터, OS 파일
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+
+# Firebase / Vercel
+.firebase/
+.vercel/
+firebase-debug.log
+
