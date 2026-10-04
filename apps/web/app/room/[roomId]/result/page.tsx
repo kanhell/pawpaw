@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { toPng } from "html-to-image";
 
 // ---------- 타입 (나중에 친구가 만든 모델로 교체) ----------
 type Award = {
@@ -36,12 +37,31 @@ const MOCK_RANKING: PlayerScore[] = [
 export default function ResultPage() {
   // step 0: 오프닝, 1~N: 시상 항목, N+1: 최종 순위, N+2: 공유
   const [step, setStep] = useState(0);
+  const cardRef = useRef<HTMLDivElement>(null);
+
   const awardCount = MOCK_AWARDS.length;
   const rankingStep = awardCount + 1;
   const shareStep = awardCount + 2;
 
   const next = () => setStep((s) => Math.min(s + 1, shareStep));
   const restart = () => setStep(0);
+
+  const saveImage = async () => {
+    if (!cardRef.current) return;
+    try {
+      const dataUrl = await toPng(cardRef.current, {
+        pixelRatio: 2,
+        cacheBust: true,
+      });
+      const link = document.createElement("a");
+      link.download = "pawpaw-result.png";
+      link.href = dataUrl;
+      link.click();
+    } catch (e) {
+      console.error(e);
+      alert("이미지 저장에 실패했어요. 다시 시도해 주세요.");
+    }
+  };
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center overflow-hidden bg-amber-50 p-6 text-center">
@@ -149,15 +169,32 @@ export default function ResultPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="flex w-full flex-col items-center gap-4"
           >
-            <div className="w-full rounded-3xl bg-white p-6 shadow-lg">
-              <p className="text-sm text-gray-500">파파야 미션 결과</p>
-              <p className="mt-2 text-6xl">{MOCK_RANKING[0].emoji}</p>
-              <p className="mt-2 text-2xl font-bold">
+            {/* 이 div가 이미지로 저장되는 영역 (9:16 비율) */}
+            <div
+              ref={cardRef}
+              className="flex aspect-[9/16] w-full flex-col items-center justify-center gap-4 rounded-3xl bg-amber-100 p-6"
+            >
+              <p className="text-sm text-gray-600">파파야 미션 결과</p>
+              <p className="text-8xl">{MOCK_RANKING[0].emoji}</p>
+              <p className="text-3xl font-bold">
                 1등 {MOCK_RANKING[0].nickname}
               </p>
+              <ul className="mt-4 w-full space-y-2">
+                {MOCK_RANKING.slice(1).map((p, i) => (
+                  <li
+                    key={p.nickname}
+                    className="flex justify-between rounded-xl bg-white px-4 py-2"
+                  >
+                    <span>
+                      {i + 2}등 {p.emoji} {p.nickname}
+                    </span>
+                    <span>{p.score}점</span>
+                  </li>
+                ))}
+              </ul>
             </div>
             <button
-              onClick={() => alert("이미지 저장은 나중에 연결해요")}
+              onClick={saveImage}
               className="rounded-full bg-red-500 px-8 py-3 font-bold text-white active:scale-95"
             >
               이미지 저장
