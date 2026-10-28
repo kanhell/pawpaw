@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { Assignment, Room, Submission } from "@pawpaw/shared";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { Assignment, Invite, Room, Submission } from "@pawpaw/shared";
 import { describeError } from "./errors";
 import {
+  checkMembership,
   loadPhoto,
+  subscribeLatestInvite,
   subscribeMembers,
   subscribeMyAssignment,
   subscribeMySubmission,
@@ -92,6 +94,54 @@ export function useMySubmission(
     uid ? `submission:${roomId}:${uid}` : null,
     (onData, onError) => subscribeMySubmission(roomId, uid ?? "", onData, onError),
   );
+}
+
+/** 이미 이 방의 멤버인지 한 번 확인한다. */
+export function useMembership(
+  roomId: string,
+  uid: string | null,
+): Loadable<boolean> {
+  return useSubscription(
+    uid ? `membership:${roomId}:${uid}` : null,
+    (onData, onError) => {
+      let cancelled = false;
+      checkMembership(roomId, uid ?? "")
+        .then((isMember) => {
+          if (!cancelled) onData(isMember);
+        })
+        .catch((error: Error) => {
+          if (!cancelled) onError(error);
+        });
+      return () => {
+        cancelled = true;
+      };
+    },
+  );
+}
+
+/** 가장 최근 초대 링크. 방장만 읽을 수 있으므로 방장일 때만 구독한다. */
+export function useLatestInvite(
+  roomId: string,
+  uid: string | null,
+  isHost: boolean,
+): Loadable<Invite | null> {
+  return useSubscription(
+    uid && isHost ? `invite:${roomId}:${uid}` : null,
+    (onData, onError) => subscribeLatestInvite(roomId, onData, onError),
+  );
+}
+
+/** 30초마다 바뀌는 현재 시각(밀리초). 만료 여부를 화면에 반영할 때 쓴다. */
+export function useNow(): number {
+  const bucket = useSyncExternalStore(
+    (callback) => {
+      const timer = setInterval(callback, 30_000);
+      return () => clearInterval(timer);
+    },
+    () => Math.floor(Date.now() / 30_000),
+    () => 0,
+  );
+  return bucket * 30_000;
 }
 
 /**

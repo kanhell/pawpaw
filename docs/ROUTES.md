@@ -15,6 +15,7 @@
 
 - 방만들기에서 모드를 고르고, 방설정에서 미션 부여 방법(정하는 주체 / 공개 범위 / 동일·각자)을 정한다.
 - 방찾기로 입장하면 방설정은 건너뛰고 캐릭터 선택으로 간다.
+- 초대 링크(`/invite/:roomId/:code`)로 들어온 사람은 닉네임과 동물을 고른 뒤 바로 대기실로 간다. 인앱 브라우저에서 열렸다면 먼저 기본 브라우저로 옮긴다. (`INVITE.md`)
 - 미션지정은 `assigner = players`(서로 정해주기)일 때만 거친다. 앱이 정하는 경우는 건너뛴다.
 - 결과는 `Room.resultAt`(n시) 이후에만 열린다.
 
@@ -27,6 +28,7 @@
 | 방만들기 (모드 선택) | `/room/new` | 확정 | User 있음 | - |
 | 방설정 | `/room/new/settings` | 확정 | 방만들기 완료 | - |
 | 캐릭터 선택 | `/room/:roomId/character` | 제안 | 방 생성 또는 방찾기로 입장 | `waiting` |
+| 초대 참가 | `/invite/:roomId/:code` | 확정 | 초대 링크 (로그인은 익명으로 자동) | `waiting` |
 | 대기실 | `/room/:roomId/lobby` | 확정 | Player로 참가 | `waiting` |
 | 미션지정 | `/room/:roomId/assign` | 확정 | Player, `assigner = players` | `playing` / `assign` |
 | 사진 인증 주의사항 | `/room/:roomId/notice` | 제안 | Player | `playing` / `reveal` 직전 |

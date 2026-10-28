@@ -9,4 +9,5 @@ export const ROUTES = {
   play: (roomId: string) => `/room/${roomId}/play`,
   result: (roomId: string) => `/room/${roomId}/result`,
   share: (roomId: string) => `/room/${roomId}/share`,
+  invite: (roomId: string, code: string) => `/invite/${roomId}/${code}`,
 } as const;

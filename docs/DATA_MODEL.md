@@ -126,6 +126,18 @@ Room 1 ── N Award N ── 1 Player
 | submissionId | string | 투표 대상 제출물 |
 | createdAt | timestamp | |
 
+### Invite
+친구 초대 링크용 코드. 링크는 `/invite/{roomId}/{code}`.
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| code | string | 영숫자 24자. 문서 ID와 같다 |
+| createdBy | string | 방장의 User id |
+| createdAt | timestamp | 서버 시각 |
+| expiresAt | timestamp | 만든 시각 + 24시간 (규칙상 최대 7일) |
+
+방장만 만들고 조회하고 폐기할 수 있다.
+
 ### Award
 시상 결과.
 
@@ -156,7 +168,8 @@ Room 1 ── N Award N ── 1 Player
 ```
 users/{uid}                          User
 rooms/{roomId}                       Room
-rooms/{roomId}/members/{uid}         Player
+rooms/{roomId}/members/{uid}         Player (초대로 참가한 멤버는 inviteCode 필드를 함께 저장)
+rooms/{roomId}/invites/{code}        Invite
 rooms/{roomId}/rounds/{roundId}      Round
 rooms/{roomId}/assignments/{id}      Assignment
 rooms/{roomId}/submissions/{id}      Submission (사진은 Cloud Storage)

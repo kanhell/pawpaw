@@ -3,15 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@pawpaw/shared";
+import ProfileFields from "../components/ProfileFields";
 import ScreenShell from "../components/ScreenShell";
+import { ANIMALS } from "../lib/animals";
 import { useAuthState } from "../lib/firebase/auth";
 import { describeError } from "../lib/firebase/errors";
 import { createRoom } from "../lib/firebase/roomRepo";
 
-const ANIMALS = ["🐻", "🐰", "🐨", "🦊", "🐶", "🐱", "🐼", "🐸"];
-
-// 임시 방 만들기 화면: 닉네임과 동물을 골라 방을 만들고 미션 받기로 이동한다.
-// 방설정, 친구 초대, 대기실은 아직 없다.
+// 임시 방 만들기 화면: 닉네임과 동물을 골라 방을 만들고 대기실로 이동한다.
+// 방설정은 아직 없다.
 export default function RoomCreateScreen() {
   const router = useRouter();
   const auth = useAuthState();
@@ -48,7 +48,7 @@ export default function RoomCreateScreen() {
     setBusy(true);
     try {
       const roomId = await createRoom(uid, { nickname: name, animal });
-      router.push(ROUTES.assign(roomId));
+      router.push(ROUTES.lobby(roomId));
     } catch (e) {
       setError(describeError(e));
       setBusy(false);
@@ -60,30 +60,12 @@ export default function RoomCreateScreen() {
       <div className="text-6xl">🐾</div>
       <h1 className="text-2xl font-bold">방 만들기</h1>
 
-      <input
-        value={nickname}
-        onChange={(event) => setNickname(event.target.value)}
-        maxLength={12}
-        placeholder="닉네임"
-        className="w-full rounded-card bg-surface px-4 py-3 text-center shadow-card outline-none"
+      <ProfileFields
+        nickname={nickname}
+        animal={animal}
+        onNicknameChange={setNickname}
+        onAnimalChange={setAnimal}
       />
-
-      <ul className="flex flex-wrap justify-center gap-2">
-        {ANIMALS.map((item) => (
-          <li key={item}>
-            <button
-              onClick={() => setAnimal(item)}
-              className={`h-14 w-14 rounded-full text-3xl shadow-card ${
-                item === animal ? "bg-primary" : "bg-surface"
-              }`}
-              aria-label={`동물 ${item}`}
-              aria-pressed={item === animal}
-            >
-              {item}
-            </button>
-          </li>
-        ))}
-      </ul>
 
       {error && <p className="text-sm text-primary">{error}</p>}
 

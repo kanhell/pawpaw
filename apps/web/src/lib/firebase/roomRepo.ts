@@ -2,8 +2,10 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   limit,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -16,11 +18,13 @@ import {
 import { getBlob, ref, uploadBytes } from "firebase/storage";
 import type {
   Assignment,
+  Invite,
   Player,
   Room,
   RoomSettings,
   Submission,
 } from "@pawpaw/shared";
+import { generateInviteCode } from "../invite/code";
 import { pickRandomMissions } from "../missions";
 import { getFirebase } from "./client";
 
@@ -92,6 +96,15 @@ function toSubmission(id: string, d: DocumentData): Submission {
     ownerId: d.ownerId,
     photoPath: d.photoPath,
     submittedAt: isoOrNow(d.submittedAt),
+  };
+}
+
+function toInvite(code: string, d: DocumentData): Invite {
+  return {
+    code,
+    createdBy: d.createdBy,
+    createdAt: isoOrNow(d.createdAt),
+    expiresAt: isoOrNow(d.expiresAt),
   };
 }
 
@@ -273,6 +286,107 @@ export async function assignRandomMissions(
     });
   });
   batch.update(doc(db, "rooms", roomId), { status: "playing", phase: "play" });
+  await batch.commit();
+}
+
+// ---------- 초대 ----------
+const INVITE_LIFETIME_MS = 24 * 60 * 60 * 1000; // 초대 링크 유효 시간: 24시간
+
+// 방장만 호출한다. 이전 초대 링크는 모두 폐기하고 새 링크 코드를 만든다.
+export async function renewInvite(roomId: string, uid: string): Promise<string> {
+  const { db } = getFirebase();
+  const invitesRef = collection(db, "rooms", roomId, "invites");
+  const previous = await getDocs(invitesRef);
+  const code = generateInviteCode();
+
+  const batch = writeBatch(db);
+  previous.docs.forEach((old) => batch.delete(old.ref));
+  batch.set(doc(invitesRef, code), {
+    code,
+    createdBy: uid,
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + INVITE_LIFETIME_MS)),
+  });
+  await batch.commit();
+  return code;
+}
+
+// 방장만 호출한다. 모든 초대 링크를 폐기한다.
+export async function revokeInvites(roomId: string): Promise<void> {
+  const { db } = getFirebase();
+  const previous = await getDocs(collection(db, "rooms", roomId, "invites"));
+  const batch = writeBatch(db);
+  previous.docs.forEach((old) => batch.delete(old.ref));
+  await batch.commit();
+}
+
+// 가장 최근에 만든 초대 링크를 구독한다. (방장만 읽을 수 있다)
+export function subscribeLatestInvite(
+  roomId: string,
+  onData: OnData<Invite | null>,
+  onError: OnError,
+): Unsubscribe {
+  const { db } = getFirebase();
+  const q = query(
+    collection(db, "rooms", roomId, "invites"),
+    orderBy("createdAt", "desc"),
+    limit(1),
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const d = snap.docs[0];
+      onData(d ? toInvite(d.id, d.data(READ_OPTIONS)) : null);
+    },
+    onError,
+  );
+}
+
+// 이미 방 멤버인지 확인한다. 멤버가 아니면 규칙이 읽기를 막으므로 false로 취급한다.
+export async function checkMembership(
+  roomId: string,
+  uid: string,
+): Promise<boolean> {
+  const { db } = getFirebase();
+  try {
+    const snap = await getDoc(doc(db, "rooms", roomId, "members", uid));
+    return snap.exists();
+  } catch (error) {
+    const code = (error as { code?: string }).code ?? "";
+    if (code.includes("permission-denied")) return false;
+    throw error;
+  }
+}
+
+// 초대 링크의 코드로 방에 참가한다.
+// 코드가 틀렸거나 만료됐거나 이미 시작된 방이면 규칙이 거부한다. (permission-denied)
+export async function joinRoom(
+  uid: string,
+  roomId: string,
+  inviteCode: string,
+  profile: { nickname: string; animal: string },
+): Promise<void> {
+  const { db } = getFirebase();
+  const batch = writeBatch(db);
+  batch.set(
+    doc(db, "users", uid),
+    {
+      id: uid,
+      nickname: profile.nickname,
+      animal: profile.animal,
+      createdAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+  batch.set(doc(db, "rooms", roomId, "members", uid), {
+    id: uid,
+    roomId,
+    userId: uid,
+    animal: profile.animal,
+    isHost: false,
+    joinedAt: serverTimestamp(),
+    inviteCode,
+  });
   await batch.commit();
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { getFirebase } from "./client";
 
 export type AuthState =
@@ -47,16 +47,24 @@ function start() {
   }
 }
 
-/** 현재 로그인 상태. uid는 Firebase Auth의 uid이며 User.id와 같다. */
-export function useAuthState(): AuthState {
-  return useSyncExternalStore(
-    (callback) => {
+/**
+ * 현재 로그인 상태. uid는 Firebase Auth의 uid이며 User.id와 같다.
+ * enabled가 false인 동안에는 로그인을 시작하지 않는다.
+ * (인앱 브라우저에서 불필요한 익명 계정이 만들어지는 것을 막을 때 쓴다)
+ */
+export function useAuthState(enabled = true): AuthState {
+  const subscribe = useCallback(
+    (callback: () => void) => {
       listeners.add(callback);
-      start();
+      if (enabled) start();
       return () => {
         listeners.delete(callback);
       };
     },
+    [enabled],
+  );
+  return useSyncExternalStore(
+    subscribe,
     () => state,
     () => LOADING,
   );

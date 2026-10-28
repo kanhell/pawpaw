@@ -121,3 +121,12 @@ export interface Award {
   comment: string | null;
   createdAt: Timestamp;
 }
+
+// 친구 초대 링크용 코드. 링크: /invite/{roomId}/{code}
+// 코드는 24자 영숫자이며 방장만 만들고 조회·폐기할 수 있다.
+export interface Invite {
+  code: string;
+  createdBy: string; // 방장의 User.id
+  createdAt: Timestamp;
+  expiresAt: Timestamp;
+}
