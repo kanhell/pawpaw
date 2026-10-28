@@ -45,6 +45,7 @@ export interface RoomSettings {
 
 export interface Room {
   id: string;
+  hostId: string; // 방장의 User.id (= Firebase Auth uid)
   settings: RoomSettings;
   status: RoomStatus;
   phase: RoomPhase | null;
@@ -93,7 +94,10 @@ export interface Assignment {
 export interface Submission {
   id: string;
   assignmentId: string;
-  photoUrl: string;
+  ownerId: string; // 제출한 Player.id (= Firebase Auth uid)
+  // 사진의 저장 경로. 다운로드 URL은 저장하지 않는다. (docs/SECURITY.md 참고)
+  // 형식: rooms/{roomId}/submissions/{ownerId}/{submissionId}.jpg
+  photoPath: string;
   submittedAt: Timestamp;
 }
 
