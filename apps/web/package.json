@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@pawpaw/shared": "workspace:*",
+    "firebase": "^13.1.0",
     "framer-motion": "^14.0.0",
     "next": "16.3.6",
     "react": "19.2.8",
@@ -22,7 +24,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "~4.1.12"
   },
   "packageManager": "pnpm@12.8.1"
 }
