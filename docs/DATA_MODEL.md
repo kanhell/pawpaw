@@ -40,6 +40,7 @@ Room 1 ── N Award N ── 1 Player
 | 필드 | 타입 | 비고 |
 |---|---|---|
 | id | string | |
+| hostId | string | 방장의 User id (Firebase Auth uid) |
 | settings | RoomSettings | 모드와 미션 부여 방법 |
 | status | RoomStatus | |
 | phase | RoomPhase \| null | `status = playing`일 때만 값이 있음 |
@@ -109,8 +110,9 @@ Room 1 ── N Award N ── 1 Player
 |---|---|---|
 | id | string | |
 | assignmentId | string | |
-| photoUrl | string | 사진 인증이므로 필수 |
-| submittedAt | timestamp | |
+| ownerId | string | 제출한 Player id (Firebase Auth uid) |
+| photoPath | string | 사진 저장 경로. 다운로드 URL은 저장하지 않는다 (`SECURITY.md` 참고) |
+| submittedAt | timestamp | 서버 시각 |
 
 ### Vote
 투표로 수상자를 정하는 시상용.
@@ -123,6 +125,18 @@ Room 1 ── N Award N ── 1 Player
 | awardType | AwardType | 어떤 상에 대한 투표인지 |
 | submissionId | string | 투표 대상 제출물 |
 | createdAt | timestamp | |
+
+### Invite
+친구 초대 링크용 코드. 링크는 `/invite/{roomId}/{code}`.
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| code | string | 영숫자 24자. 문서 ID와 같다 |
+| createdBy | string | 방장의 User id |
+| createdAt | timestamp | 서버 시각 |
+| expiresAt | timestamp | 만든 시각 + 24시간 (규칙상 최대 7일) |
+
+방장만 만들고 조회하고 폐기할 수 있다.
 
 ### Award
 시상 결과.
@@ -146,6 +160,23 @@ Room 1 ── N Award N ── 1 Player
 ## 보류
 
 - 1인모드 캐릭터 성장(레벨·경험치), 집 꾸미기: 키우기 요소를 추가할 때 설계한다.
+
+## Firestore 저장 구조
+
+`Player`는 문서 ID를 `userId`(= Firebase Auth uid)와 같게 둔다. 보안 규칙이 `members/{uid}` 문서의 존재로 방 멤버를 판단하기 때문이다.
+
+```
+users/{uid}                          User
+rooms/{roomId}                       Room
+rooms/{roomId}/members/{uid}         Player (초대로 참가한 멤버는 inviteCode 필드를 함께 저장)
+rooms/{roomId}/invites/{code}        Invite
+rooms/{roomId}/rounds/{roundId}      Round
+rooms/{roomId}/assignments/{id}      Assignment
+rooms/{roomId}/submissions/{id}      Submission (사진은 Cloud Storage)
+rooms/{roomId}/votes/{id}            Vote
+rooms/{roomId}/awards/{id}           Award
+missions/{id}                        Mission (기본 제공 목록)
+```
 
 ## 열린 질문
 
