@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { toPng } from "html-to-image";
-import { resultRepository } from "./repository";
+import { useAuthState } from "../../../../src/lib/firebase/auth";
+import { RESULTS_NOT_OPEN, resultRepository } from "./repository";
 import type { Player, RoomData, VoteCategory } from "./types";
 
 const CATEGORY_TEXT: Record<VoteCategory, { title: string; question: string }> = {
@@ -173,31 +174,54 @@ function RevealStage({
 // ---------- 전체 화면 ----------
 type Phase = "voteFunny" | "voteHard" | "waiting" | "reveal" | "share";
 
+// 이미 투표한 적이 있으면 그 다음 단계부터 시작
+function phaseFor(d: RoomData): Phase {
+  const funny = d.votes.funny[d.me];
+  const hard = d.votes.hard[d.me];
+  if (funny && hard) return "waiting";
+  if (funny) return "voteHard";
+  return "voteFunny";
+}
+
 export default function ResultPage() {
   const params = useParams<{ roomId: string }>();
   const roomId = params.roomId;
 
+  const auth = useAuthState(); // 익명 로그인 (친구의 auth.ts)
+  const uid = auth.status === "signedIn" ? auth.uid : null;
+
   const [data, setData] = useState<RoomData | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"notOpen" | "failed" | null>(null);
   const [phase, setPhase] = useState<Phase>("voteFunny");
   const [revealIndex, setRevealIndex] = useState(0);
+  const initialized = useRef(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const load = async () => {
+  const load = async (): Promise<RoomData | null> => {
+    if (!uid) return null;
     try {
-      setData(await resultRepository.getRoomData(roomId));
-      setError(false);
+      const d = await resultRepository.getRoomData(roomId, uid);
+      setData(d);
+      setError(null);
+      return d;
     } catch (e) {
       console.error(e);
-      setError(true);
+      setError(e instanceof Error && e.message === RESULTS_NOT_OPEN ? "notOpen" : "failed");
+      return null;
     }
   };
 
-  // 처음 데이터 불러오기
+  // 로그인되면 데이터를 불러오고, 처음 한 번만 내 투표 상태에 맞는 단계로 시작
   useEffect(() => {
-    load();
+    if (!uid) return;
+    load().then((d) => {
+      if (d && !initialized.current) {
+        initialized.current = true;
+        setPhase(phaseFor(d));
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
+  }, [roomId, uid]);
 
   // 대기 화면에서는 3초마다 다시 불러와서 "전원 투표 완료"를 확인
   useEffect(() => {
@@ -205,7 +229,7 @@ export default function ResultPage() {
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, roomId]);
+  }, [phase, roomId, uid]);
 
   const revealList = useMemo(() => {
     if (!data) return [];
@@ -232,9 +256,9 @@ export default function ResultPage() {
     }
   };
 
-  const restart = () => {
+  const replay = () => {
     setRevealIndex(0);
-    setPhase("voteFunny");
+    setPhase("reveal");
   };
 
   const saveImage = async () => {
@@ -253,7 +277,25 @@ export default function ResultPage() {
 
   const shell = "mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center bg-amber-50 p-6 text-center";
 
-  if (error) {
+  if (auth.status === "error") {
+    return (
+      <main className={shell}>
+        <p className="text-gray-600">로그인에 실패했어요.</p>
+        <p className="mt-2 text-sm text-gray-400">{auth.message}</p>
+      </main>
+    );
+  }
+  if (error === "notOpen") {
+    return (
+      <main className={shell}>
+        <p className="text-gray-600">아직 결과 공개 전이거나 이 방의 멤버가 아니에요.</p>
+        <button onClick={load} className="mt-4 rounded-full bg-red-500 px-6 py-2 font-bold text-white">
+          다시 확인
+        </button>
+      </main>
+    );
+  }
+  if (error === "failed") {
     return (
       <main className={shell}>
         <p className="text-gray-600">데이터를 불러오지 못했어요.</p>
@@ -271,8 +313,10 @@ export default function ResultPage() {
     );
   }
 
-  const candidates = data.players.filter((p) => p.id !== data.me); // 자기 자신에게는 투표 불가
-  if (candidates.length === 0) {
+  // 사진을 제출한 친구만, 자기 자신은 제외하고 투표 후보로 보여준다
+  const submittedIds = new Set(data.submissions.map((s) => s.playerId));
+  const candidates = data.players.filter((p) => p.id !== data.me && submittedIds.has(p.id));
+  if (candidates.length === 0 && phase.startsWith("vote")) {
     return (
       <main className={shell}>
         <p className="text-gray-600">투표할 친구가 아직 없어요.</p>
@@ -372,8 +416,8 @@ export default function ResultPage() {
             >
               이미지 저장
             </button>
-            <button onClick={restart} className="text-sm text-gray-500 underline">
-              처음부터 다시 보기
+            <button onClick={replay} className="text-sm text-gray-500 underline">
+              발표 다시 보기
             </button>
           </motion.section>
         )}
