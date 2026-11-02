@@ -13,7 +13,11 @@ import {
   useNow,
   useRoom,
 } from "../lib/firebase/hooks";
-import { renewInvite, revokeInvites } from "../lib/firebase/roomRepo";
+import {
+  renewInvite,
+  revokeInvites,
+  startSettingsPhase,
+} from "../lib/firebase/roomRepo";
 import { useBrowserInfo } from "../lib/invite/useBrowserInfo";
 
 // 대기실: 참가자를 실시간으로 보여주고, 방장은 초대 링크를 만들어 공유한다.
@@ -33,11 +37,16 @@ export default function LobbyScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 게임이 시작되면(미션이 부여되면) 모두 미션 화면으로 이동한다.
+  // 방장이 게임 시작을 누르면(playing) 모두 해당 단계의 화면으로 이동한다.
+  // 설정 단계면 게임 설정, 이미 설정이 끝났다면 미션 화면이다.
   const started = room.status === "ready" && room.data?.status === "playing";
+  const startedPhase = room.status === "ready" ? (room.data?.phase ?? null) : null;
   useEffect(() => {
-    if (started) router.replace(ROUTES.assign(roomId));
-  }, [started, roomId, router]);
+    if (!started) return;
+    router.replace(
+      startedPhase === "settings" ? ROUTES.settings(roomId) : ROUTES.assign(roomId),
+    );
+  }, [started, startedPhase, roomId, router]);
 
   if (auth.status === "error") {
     return (
@@ -220,12 +229,13 @@ export default function LobbyScreen() {
       )}
 
       {isHost && (
-        <Link
-          href={ROUTES.assign(roomId)}
-          className="rounded-full bg-primary px-8 py-3 text-lg font-bold text-primary-foreground active:scale-95"
+        <button
+          onClick={() => run(() => startSettingsPhase(roomId))}
+          disabled={busy}
+          className="rounded-full bg-primary px-8 py-3 text-lg font-bold text-primary-foreground active:scale-95 disabled:opacity-50"
         >
-          게임 시작
-        </Link>
+          {busy ? "시작하는 중…" : "게임 시작"}
+        </button>
       )}
     </ScreenShell>
   );
