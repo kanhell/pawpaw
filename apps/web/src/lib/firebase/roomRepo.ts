@@ -19,6 +19,7 @@ import {
 import { getBlob, ref, uploadBytes } from "firebase/storage";
 import type {
   Assignment,
+  GameMode,
   Invite,
   MissionScope,
   Player,
@@ -28,6 +29,7 @@ import type {
 } from "@pawpaw/shared";
 import { generateInviteCode } from "../invite/code";
 import { MISSION_TEXT_MAX, pickDistinctMissions } from "../missions";
+import { DEFAULT_MODE, buildRoomSettings } from "../modes";
 import { getFirebase } from "./client";
 
 /**
@@ -114,22 +116,17 @@ function toInvite(code: string, d: DocumentData): Invite {
 }
 
 // ---------- 방 만들기 ----------
+// 모드는 방을 만들 때만 정해지고 이후에는 바꿀 수 없다. (규칙이 막는다)
 export async function createRoom(
   uid: string,
   profile: { nickname: string; animal: string },
+  mode: GameMode = DEFAULT_MODE,
 ): Promise<string> {
   const { db } = getFirebase();
   const roomRef = doc(collection(db, "rooms"));
   const roomId = roomRef.id;
 
-  const settings: RoomSettings = {
-    mode: "oneshot",
-    assigner: "app",
-    visibility: "private",
-    scope: "different",
-    durationDays: null,
-    timeLimitSec: null,
-  };
+  const settings: RoomSettings = buildRoomSettings(mode);
 
   // 사용자, 방, 방장 멤버를 한 번에 만든다. (모두 성공하거나 모두 실패)
   const batch = writeBatch(db);
@@ -260,8 +257,12 @@ export function subscribeMySubmission(
 }
 
 // ---------- 게임 설정 (방장) ----------
+// mode는 바꿀 수 없으므로 포함하지 않는다.
 export type RoomSettingsPatch = Partial<
-  Pick<RoomSettings, "assigner" | "visibility" | "scope">
+  Pick<
+    RoomSettings,
+    "assigner" | "visibility" | "scope" | "durationDays" | "timeLimitSec"
+  >
 >;
 
 // 게임 시작: 설정 단계로 들어간다. playing이 되면 새 참가는 받지 않는다. (규칙: 참가는 waiting일 때만)
@@ -278,7 +279,7 @@ export async function updateRoomSettings(
   roomId: string,
   patch: RoomSettingsPatch,
 ): Promise<void> {
-  const updates: Record<string, string> = {};
+  const updates: Record<string, string | number | null> = {};
   for (const [key, value] of Object.entries(patch)) {
     if (value !== undefined) updates[`settings.${key}`] = value;
   }
@@ -296,6 +297,12 @@ export async function updateResultAt(
   await updateDoc(doc(db, "rooms", roomId), {
     resultAt: Timestamp.fromDate(resultAt),
   });
+}
+
+// 결과 공개 시각을 비운다. (시각을 정하지 않는 모드에서만 쓴다. 비우면 방장이 직접 공개한다)
+export async function clearResultAt(roomId: string): Promise<void> {
+  const { db } = getFirebase();
+  await updateDoc(doc(db, "rooms", roomId), { resultAt: null });
 }
 
 // 설정을 마치고 미션지정 단계로 넘어간다.

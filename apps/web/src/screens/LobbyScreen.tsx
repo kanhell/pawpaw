@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ROUTES } from "@pawpaw/shared";
+import ModeBadge from "../components/ModeBadge";
 import ScreenShell from "../components/ScreenShell";
 import { useAuthState } from "../lib/firebase/auth";
 import { describeError } from "../lib/firebase/errors";
@@ -19,8 +20,10 @@ import {
   startSettingsPhase,
 } from "../lib/firebase/roomRepo";
 import { useBrowserInfo } from "../lib/invite/useBrowserInfo";
+import { getMode } from "../lib/modes";
 
 // 대기실: 참가자를 실시간으로 보여주고, 방장은 초대 링크를 만들어 공유한다.
+// 초대가 필요 없는 모드(1인모드)는 초대 영역을 보여주지 않는다.
 export default function LobbyScreen() {
   const { roomId } = useParams<{ roomId: string }>();
   const router = useRouter();
@@ -29,7 +32,10 @@ export default function LobbyScreen() {
   const room = useRoom(roomId, uid);
   const members = useMembers(roomId, uid);
   const isHost = room.status === "ready" && room.data?.hostId === uid;
-  const invite = useLatestInvite(roomId, uid, isHost);
+  const inviteAllowed =
+    room.status === "ready" && room.data !== null && getMode(room.data.settings.mode).invite;
+  const showInvite = isHost && inviteAllowed;
+  const invite = useLatestInvite(roomId, uid, showInvite);
   const now = useNow();
   const { origin } = useBrowserInfo();
 
@@ -134,6 +140,7 @@ export default function LobbyScreen() {
     <ScreenShell>
       <div className="text-6xl">🏠</div>
       <h1 className="text-2xl font-bold">대기실</h1>
+      <ModeBadge mode={room.data.settings.mode} />
 
       <ul className="flex flex-wrap justify-center gap-2">
         {members.data.map(({ player, nickname }) => (
@@ -148,7 +155,7 @@ export default function LobbyScreen() {
       </ul>
       <p className="text-sm text-ink-muted">참가자 {members.data.length}명</p>
 
-      {isHost ? (
+      {showInvite && (
         <div className="flex w-full flex-col items-center gap-3 rounded-sheet bg-surface p-5 shadow-card">
           <p className="font-bold">친구 초대하기</p>
 
@@ -222,9 +229,16 @@ export default function LobbyScreen() {
           {notice && <p className="text-xs text-ink-muted">{notice}</p>}
           {error && <p className="text-xs text-primary">{error}</p>}
         </div>
-      ) : (
+      )}
+
+      {!isHost && (
         <p className="text-sm text-ink-muted">
           방장이 시작하면 자동으로 넘어가요.
+        </p>
+      )}
+      {isHost && !showInvite && (
+        <p className="text-sm text-ink-muted">
+          혼자 하는 모드라 초대 없이 바로 시작할 수 있어요.
         </p>
       )}
 
