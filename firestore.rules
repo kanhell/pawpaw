@@ -54,12 +54,15 @@ service cloud.firestore {
     match /rooms/{roomId} {
       allow get: if isMember(roomId);
       allow list: if false;
+      // 방을 만들 때 모드(settings.mode)를 정한다. (docs/MODES.md)
       allow create: if signedIn()
         && request.resource.data.hostId == request.auth.uid
-        && request.resource.data.status == 'waiting';
-      // 방장만 수정할 수 있고, 방장 자체는 바꿀 수 없다.
+        && request.resource.data.status == 'waiting'
+        && request.resource.data.settings.mode in ['daily', 'oneshot', 'race', 'solo', 'endless'];
+      // 방장만 수정할 수 있고, 방장 자체와 모드는 바꿀 수 없다.
       allow update: if isHost(roomId)
-        && request.resource.data.hostId == resource.data.hostId;
+        && request.resource.data.hostId == resource.data.hostId
+        && request.resource.data.settings.mode == resource.data.settings.mode;
       allow delete: if false;
 
       // 방 멤버(Player). 문서 ID = Firebase Auth uid
@@ -82,6 +85,33 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/rooms/$(roomId)/invites/$(code)).data.expiresAt > request.time;
         }
 
+        // 본인 문서에서 바꿀 수 있는 것은 세 가지뿐이다.
+        // - animal: 동물 캐릭터
+        // - assignmentDone: '미션을 정했어요' 표시. true로만, 미션지정 단계(phase = assign)에서만.
+        //   (docs/MISSION_ASSIGN.md)
+        // - submitted: '제출했어요' 표시. true로만, 내 제출 문서(s-a-내uid)가 이미 있을 때만.
+        //   다른 멤버에게 "제출했는지"만 알려 주는 용도이며, 사진 경로나 시각은 담지 않는다.
+        //   (docs/RESULT_REVEAL.md)
+        function validMemberUpdate() {
+          let data = request.resource.data;
+          let changed = data.diff(resource.data).affectedKeys();
+          return changed.hasOnly(['animal', 'assignmentDone', 'submitted'])
+            && (
+              !changed.hasAny(['assignmentDone'])
+              || (
+                data.assignmentDone == true
+                && roomData(roomId).get('phase', null) == 'assign'
+              )
+            )
+            && (
+              !changed.hasAny(['submitted'])
+              || (
+                data.submitted == true
+                && exists(/databases/$(database)/documents/rooms/$(roomId)/submissions/$('s-a-' + uid))
+              )
+            );
+        }
+
         allow read: if isMember(roomId);
         // 방장이 자기 자신을 추가하거나(방과 같은 batch로 만들 수 있도록 getAfter 사용),
         // 유효한 초대 코드로 참가할 때만 만들 수 있다.
@@ -91,10 +121,10 @@ service cloud.firestore {
             getAfter(/databases/$(database)/documents/rooms/$(roomId)).data.hostId == uid
             || validJoin()
           );
-        // 본인의 동물 캐릭터만 바꿀 수 있다.
+        // 본인의 동물 캐릭터와 '미션을 정했어요'·'제출했어요' 표시만 바꿀 수 있다.
         allow update: if signedIn()
           && request.auth.uid == uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['animal']);
+          && validMemberUpdate();
         allow delete: if false;
       }
 
@@ -121,17 +151,53 @@ service cloud.firestore {
 
       // 목록으로 조회할 때는 where('receiverId', '==', uid)처럼
       // 규칙 조건과 맞는 쿼리만 허용된다.
+      // (미션을 '미리 전체 공개'로 정한 방에서는 where 없이 전체를 조회할 수 있다)
       match /assignments/{assignmentId} {
+        // 미션 배정 만들기 (docs/MISSION_ASSIGN.md). 모두 미션지정 단계(phase = assign)에서만 가능하다.
+        // - 앱이 정하는 방식: 방장만, giverId는 null, 기본 제공 미션 id(missionId)
+        // - 직접 부여: giverId가 본인인 문서만, 직접 쓴 미션 본문(missionText) 1~60자.
+        //   '모두 같은 미션'이면 방장만 만들 수 있다.
+        // 같은 문서 ID(a-받는사람)에는 한 번만 만들 수 있다. (update는 막혀 있다)
+        function validAssignment() {
+          let d = request.resource.data;
+          let room = roomData(roomId);
+          let missionId = d.get('missionId', null);
+          let missionText = d.get('missionText', null);
+          return isMember(roomId)
+            && room.get('phase', null) == 'assign'
+            && d.keys().hasOnly(['id', 'roomId', 'roundId', 'giverId', 'receiverId', 'missionId', 'missionText', 'order', 'createdAt'])
+            && d.id == assignmentId
+            && d.roomId == roomId
+            && d.order == 1
+            && d.createdAt == request.time
+            && d.receiverId is string
+            && (
+              (
+                room.settings.get('assigner', null) == 'app'
+                && isHost(roomId)
+                && d.giverId == null
+                && missionId is string
+                && missionText == null
+              )
+              || (
+                room.settings.get('assigner', null) == 'players'
+                && d.giverId == request.auth.uid
+                && missionId == null
+                && missionText is string
+                && missionText.size() >= 1
+                && missionText.size() <= 60
+                && (room.settings.get('scope', null) == 'different' || isHost(roomId))
+              )
+            );
+        }
+
         allow read: if isMember(roomId) && (
           resource.data.receiverId == request.auth.uid
           || resource.data.giverId == request.auth.uid
           || roomData(roomId).settings.get('visibility', null) == 'public'
           || resultsOpen(roomId)
         );
-        allow create: if isMember(roomId) && (
-          isHost(roomId)
-          || request.resource.data.giverId == request.auth.uid
-        );
+        allow create: if validAssignment();
         allow update, delete: if false;
       }
 

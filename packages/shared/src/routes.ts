@@ -4,6 +4,7 @@ export const ROUTES = {
   roomNew: '/room/new',
   roomSettings: '/room/new/settings',
   lobby: (roomId: string) => `/room/${roomId}/lobby`,
+  settings: (roomId: string) => `/room/${roomId}/settings`,
   assign: (roomId: string) => `/room/${roomId}/assign`,
   reveal: (roomId: string) => `/room/${roomId}/reveal`,
   play: (roomId: string) => `/room/${roomId}/play`,

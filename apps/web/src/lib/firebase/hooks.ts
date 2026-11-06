@@ -11,6 +11,7 @@ import {
   subscribeMyAssignment,
   subscribeMySubmission,
   subscribeRoom,
+  subscribeRoomAssignments,
   type MemberProfile,
 } from "./roomRepo";
 
@@ -83,6 +84,21 @@ export function useMyAssignment(
   return useSubscription(
     uid ? `assignment:${roomId}:${uid}` : null,
     (onData, onError) => subscribeMyAssignment(roomId, uid ?? "", onData, onError),
+  );
+}
+
+/**
+ * 방 안의 모든 미션 배정. 미션을 '미리 전체 공개'로 정한 방에서만 규칙이 허용하므로
+ * enabled일 때만 구독한다. (docs/MISSION_ASSIGN.md)
+ */
+export function useRoomAssignments(
+  roomId: string,
+  uid: string | null,
+  enabled: boolean,
+): Loadable<Assignment[]> {
+  return useSubscription(
+    uid && enabled ? `assignments:${roomId}:${uid}` : null,
+    (onData, onError) => subscribeRoomAssignments(roomId, onData, onError),
   );
 }
 

@@ -7,7 +7,7 @@ export type GameMode = 'daily' | 'oneshot' | 'race' | 'solo' | 'endless';
 // 매일매일 / 일회성 / 선착순 / 1인모드 / 무한미션
 
 export type RoomStatus = 'waiting' | 'playing' | 'finished';
-export type RoomPhase = 'assign' | 'reveal' | 'play' | 'waitResult'; // status가 playing일 때만
+export type RoomPhase = 'settings' | 'assign' | 'reveal' | 'play' | 'waitResult'; // status가 playing일 때만
 
 export type MissionAssigner = 'players' | 'app'; // 서로 정해주기 / 앱이 정해주기
 export type MissionVisibility = 'public' | 'private'; // 미리 전체 공개 / 본인만 확인
@@ -61,6 +61,8 @@ export interface Player {
   animal: AnimalCharacter; // 방에서 선택한 캐릭터
   isHost: boolean;
   joinedAt: Timestamp;
+  assignmentDone?: boolean; // 직접 부여 단계에서 내가 정해줄 미션을 모두 정했는지. 없으면 false
+  submitted?: boolean; // 미션 사진을 제출했는지. 다른 멤버에게도 보인다(사진은 아님). 없으면 false
 }
 
 export interface Round {
@@ -84,9 +86,10 @@ export interface Assignment {
   id: string;
   roomId: string;
   roundId: string;
-  giverId: string | null; // Player.id, 앱이 정한 경우 null
+  giverId: string | null; // Player.id, 앱이 정한 경우 null. '모두 같은 미션'을 직접 정했다면 방장
   receiverId: string; // Player.id
-  missionId: string;
+  missionId: string | null; // 기본 제공 미션 id. 직접 정한 미션이면 null
+  missionText?: string; // 직접 정한 미션 본문(1~60자). missionId와 둘 중 하나만 있다
   order: number; // 무한미션의 순서, 그 외는 1
   createdAt: Timestamp;
 }

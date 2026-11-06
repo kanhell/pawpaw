@@ -1,6 +1,6 @@
 # 데이터 모델 (DATA_MODEL)
 
-기획은 `PLANNING.md`, 화면은 `ROUTES.md` 참고. 타입 정의는 `packages/shared/src/models.ts`.
+기획은 `PLANNING.md`, 화면은 `ROUTES.md`, 모드는 `MODES.md` 참고. 타입 정의는 `packages/shared/src/models.ts`.
 
 ## 엔티티 관계
 
@@ -17,9 +17,9 @@ Room 1 ── N Award N ── 1 Player
 
 | 이름 | 값 | 설명 |
 |---|---|---|
-| `GameMode` | `daily` `oneshot` `race` `solo` `endless` | 매일매일 / 일회성 / 선착순 / 1인 / 무한미션 |
+| `GameMode` | `daily` `oneshot` `race` `solo` `endless` | 매일매일 / 일회성 / 선착순 / 1인 / 무한미션. 방을 만들 때 정하고 바꿀 수 없다 (`MODES.md`) |
 | `RoomStatus` | `waiting` `playing` `finished` | 대기 / 진행 / 종료 |
-| `RoomPhase` | `assign` `reveal` `play` `waitResult` | `playing` 안의 단계 |
+| `RoomPhase` | `settings` `assign` `reveal` `play` `waitResult` | `playing` 안의 단계. `settings`는 방장이 게임 설정을 하는 단계 |
 | `MissionAssigner` | `players` `app` | 서로 정해주기 / 앱이 정해주기 |
 | `MissionVisibility` | `public` `private` | 미리 전체 공개 / 본인만 확인 |
 | `MissionScope` | `same` `different` | 전체 동일 / 각자 다름 |
@@ -41,22 +41,22 @@ Room 1 ── N Award N ── 1 Player
 |---|---|---|
 | id | string | |
 | hostId | string | 방장의 User id (Firebase Auth uid) |
-| settings | RoomSettings | 모드와 미션 부여 방법 |
-| status | RoomStatus | |
-| phase | RoomPhase \| null | `status = playing`일 때만 값이 있음 |
-| deadlineAt | timestamp \| null | 미션 수행 마감 |
-| resultAt | timestamp \| null | 결과 공개 시각(n시) |
+| settings | RoomSettings | 모드와 미션 부여 방법. `settings.mode`는 방을 만들 때만 정하고 바꿀 수 없다 (`MODES.md`) |
+| status | RoomStatus | `finished`는 방장이 결과를 먼저 공개하면 바뀐다 (`RESULT_REVEAL.md`) |
+| phase | RoomPhase \| null | `status = playing`일 때만 값이 있음. 게임 시작 직후에는 `settings` |
+| deadlineAt | timestamp \| null | 미션 수행 마감. 방장이 결과를 먼저 공개하면 그 시각으로 채워진다 |
+| resultAt | timestamp \| null | 결과 공개 시각(n시). 모드의 정책에 따라 게임 설정에서 방장이 정하거나 정하지 않는다 (`MODES.md`). 정하는 경우에는 지금보다 뒤여야 설정을 완료할 수 있다. **`null`이면 시각으로는 결과가 열리지 않고**, 방장이 먼저 공개해야 열린다. 방장이 먼저 공개하면 그 시각으로 채워지거나 바뀐다 |
 | createdAt | timestamp | |
 
 ### RoomSettings
 | 필드 | 타입 | 비고 |
 |---|---|---|
-| mode | GameMode | |
-| assigner | MissionAssigner | |
-| visibility | MissionVisibility | |
-| scope | MissionScope | |
-| durationDays | number \| null | `daily`: 진행 일수 |
-| timeLimitSec | number \| null | `endless`: 제한 시간 |
+| mode | GameMode | 방을 만들 때 정하고 바꿀 수 없다. 모드별 규칙은 `MODES.md` |
+| assigner | MissionAssigner | 모드가 허용하는 값만 고를 수 있다 |
+| visibility | MissionVisibility | `scope = same`이면 묻지 않고 항상 `public`으로 저장한다. 모드가 해당 없음(1인모드)이면 `private` |
+| scope | MissionScope | 모드가 해당 없음(1인모드)이면 `different`로 저장한다 |
+| durationDays | number \| null | `daily`: 진행 일수(기본 7, 2~30). `null`이면 기간 없이 계속한다. 다른 모드는 `null` |
+| timeLimitSec | number \| null | `endless`: 제한 시간(초, 기본 180, 60~600). 다른 모드는 `null` |
 
 ### Player
 방 안의 사용자. `User`를 참조한다.
@@ -69,6 +69,8 @@ Room 1 ── N Award N ── 1 Player
 | animal | AnimalCharacter | 방에서 선택한 동물 캐릭터 |
 | isHost | boolean | |
 | joinedAt | timestamp | |
+| assignmentDone | boolean (선택) | 직접 부여 단계에서 내가 정해줄 미션을 모두 정했는지. 값이 없으면 false. 본인만 `true`로 바꿀 수 있다 |
+| submitted | boolean (선택) | 미션 사진을 제출했는지. 값이 없으면 false. 같은 방 멤버 모두(방장 포함)에게 보인다. 사진·경로·시각은 담지 않는다. 본인만, 내 제출 문서가 있을 때 `true`로 바꿀 수 있다 (`RESULT_REVEAL.md`) |
 
 ### Round
 하루(또는 한 판) 단위. `daily`는 날마다 하나씩, 나머지 모드는 방당 하나.
@@ -88,7 +90,7 @@ Room 1 ── N Award N ── 1 Player
 | text | string | |
 | category | string | 카테고리 목록 미정 |
 | difficulty | number | 난이도 스케일 미정 |
-| source | `preset` \| `player` | 기본 제공 / 플레이어가 직접 작성 |
+| source | `preset` \| `player` | 기본 제공 / 플레이어가 직접 작성. 직접 정한 미션은 별도 Mission 문서를 만들지 않고 `Assignment.missionText`에 담는다 |
 | createdBy | string \| null | 직접 작성한 Player id |
 
 ### Assignment
@@ -99,9 +101,10 @@ Room 1 ── N Award N ── 1 Player
 | id | string | |
 | roomId | string | |
 | roundId | string | |
-| giverId | string \| null | Player id, 앱이 정한 경우 null |
+| giverId | string \| null | Player id, 앱이 정한 경우 null. `scope = same`으로 직접 부여하면 방장 |
 | receiverId | string | Player id |
-| missionId | string | |
+| missionId | string \| null | 기본 제공 미션 id. 직접 정한 미션이면 null |
+| missionText | string (선택) | 직접 정한 미션 본문(1~60자). `missionId`와 둘 중 하나만 있다 |
 | order | number | 무한미션의 순서, 그 외는 1 |
 | createdAt | timestamp | |
 
@@ -127,7 +130,7 @@ Room 1 ── N Award N ── 1 Player
 | createdAt | timestamp | |
 
 ### Invite
-친구 초대 링크용 코드. 링크는 `/invite/{roomId}/{code}`.
+친구 초대 링크용 코드. 링크는 `/invite/{roomId}/{code}`. 초대가 필요 없는 모드(1인모드)는 만들지 않는다.
 
 | 필드 | 타입 | 비고 |
 |---|---|---|
@@ -184,7 +187,10 @@ missions/{id}                        Mission (기본 제공 목록)
 2. 선착순 "한 명 살아남기"의 규칙(탈락 조건, 생존 상태 저장 방식).
 3. 매일매일 모드의 보상/벌칙을 데이터로 다룰지.
 4. `Room.status`와 `phase`를 둘로 나누는 현재 방식이 맞는지.
-5. 모드별 설정(`durationDays`, `timeLimitSec`)을 지금처럼 한 구조에 둘지, 모드별 타입으로 나눌지.
+5. 모드별 설정(`durationDays`, `timeLimitSec`)을 한 구조에 두는 방식이 맞는지. 지금은 한 구조에 두고, 어떤 모드가 어떤 값을 쓰는지는 `lib/modes.ts`가 정한다. 모드별 타입으로 나눌지는 모드별 플레이를 구현하면서 정한다.
 6. 백엔드 저장소(Firestore 등)에 따라 `Player`, `Round`를 Room 하위 컬렉션으로 둘지.
 7. 사용자 인증 방식: 익명/게스트 vs 로그인.
 8. `User.animal`과 `Player.animal`을 둘 다 둘지, `Player.animal`만 둘지.
+9. 게임 설정 변경을 참가자에게 알리는 방식: 현재는 `rooms/{roomId}` 문서 구독으로 실시간 반영한다. 백엔드가 바뀌면 같은 방식이 가능한지 확인한다.
+10. 직접 정한 미션을 Mission 문서로 정규화할지(재사용·통계). 지금은 `Assignment.missionText`에 담는다. (`MISSION_ASSIGN.md`)
+11. 매일매일의 날짜별 미션 배정·제출을 담으려면 `Assignment`·`Submission` ID 체계(`a-{uid}`, `s-a-{uid}`)를 라운드별로 바꿔야 한다. (`MODES.md`)
