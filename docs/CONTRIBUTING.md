@@ -90,5 +90,6 @@ chore: set up monorepo workspace
 - 기획: `docs/PLANNING.md`
 - 데이터 모델: `docs/DATA_MODEL.md`
 - 라우팅: `docs/ROUTES.md`
+- 모드: `docs/MODES.md`
 - 디자인 토큰: `docs/DESIGN_TOKENS.md`
 - 코드와 문서가 어긋나면 문서를 먼저 고친다.
