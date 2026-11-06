@@ -325,7 +325,7 @@ export default function MissionPlayScreen() {
               <p className="text-xs text-ink-subtle">
                 {scheduledText
                   ? `정해 둔 시각(${scheduledText}) 전에도 공개할 수 있어요.`
-                  : "정해 둔 시각 전에도 공개할 수 있어요."}
+                  : "결과 공개 시각을 정하지 않았어요. 준비되면 직접 공개해 주세요."}
               </p>
             </>
           )}
