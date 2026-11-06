@@ -82,7 +82,8 @@ export default function ResultPage() {
       return <RaceResult roomId={roomId} data={data} onReload={load} />;
     case "endless":
       return <EndlessResult roomId={roomId} data={data} onReload={load} />;
-    case "daily":
+        case "daily":
+    case "solo": // 1인 모드는 매일 모드에 합쳐져 있어요
       return <DailyResult data={data} />;
     default:
       return (
