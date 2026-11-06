@@ -10,6 +10,8 @@ export type Submission = {
   photoPath: string; // Storage 경로 (mock은 빈 문자열)
   assignmentId: string;
   submittedAt: number; // ms
+  order: number; // 무한 모드의 미션 순서 (그 외는 1)
+  roundIndex: number; // 몇 번째 라운드/일차인지 (1부터)
 };
 
 export type VoteCategory = "funny" | "hard";
@@ -26,4 +28,6 @@ export type RoomData = {
   objections: Record<string, string[]>; // 제출물id → 반대한 사람 id들
   objectionDone: string[]; // 이의제기를 끝낸 사람 id들
   missionTexts: Record<string, string>; // 제출물id → 미션 문구
+  survivorCount: number; // 선착순 모드 생존자 수 (settings에 없으면 3)
+  durationDays: number | null; // 매일 모드 진행 일수
 };

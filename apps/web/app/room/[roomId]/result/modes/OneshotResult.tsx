@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toPng } from "html-to-image";
-import { useStoragePhoto } from "../../../../../src/lib/firebase/hooks";
+import Photo from "../components/Photo";
+import ObjectionStage from "../components/ObjectionStage";
+import RevealStage from "../components/RevealStage";
+import { allObjectionDone, failedIds, playerOf } from "../logic";
+import { makeObjectionActions, usePolling } from "../flow";
 import { resultRepository } from "../repository";
 import type { Player, RoomData, Submission, VoteCategory } from "../types";
 
@@ -11,18 +15,6 @@ const CATEGORY_TEXT: Record<VoteCategory, { title: string; question: string }> =
   funny: { title: "가장 웃긴 미션", question: "가장 웃긴 미션을 골라주세요" },
   hard: { title: "가장 어려운 미션", question: "가장 어려운 미션을 골라주세요" },
 };
-
-// ---------- 계산 함수 (인원 수와 상관없이 동작) ----------
-// 반대 수가 참가자 전체의 절반을 넘으면 실패
-function failedIds(d: RoomData): Set<string> {
-  const failed = new Set<string>();
-  Object.entries(d.objections).forEach(([subId, list]) => {
-    if (new Set(list).size * 2 > d.players.length) failed.add(subId);
-  });
-  return failed;
-}
-
-const playerOf = (d: RoomData, id: string) => d.players.find((p) => p.id === id);
 
 function getFastest(d: RoomData, failed: Set<string>): Player | null {
   const first = d.submissions
@@ -45,107 +37,9 @@ function getVoteWinner(d: RoomData, category: VoteCategory, failed: Set<string>)
   return player ? { player, count: top[1] } : null;
 }
 
-const allObjectionDone = (d: RoomData) => d.players.every((p) => d.objectionDone.includes(p.id));
 const allVoted = (d: RoomData) =>
   d.players.every((p) => d.votes.funny[p.id] && d.votes.hard[p.id]);
 
-// ---------- 사진 ----------
-function Photo({ s, className }: { s: Submission; className?: string }) {
-  const { url, failed } = useStoragePhoto(s.photoPath || null, String(s.submittedAt));
-  if (url) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt="제출한 사진" className={`object-cover ${className ?? ""}`} />;
-  }
-  return (
-    <div className={`flex items-center justify-center bg-gray-200 text-sm text-gray-500 ${className ?? ""}`}>
-      {failed ? "사진을 못 불러왔어요" : s.photoPath ? "불러오는 중..." : "📷"}
-    </div>
-  );
-}
-
-// ---------- 이의제기 ----------
-function ObjectionStage({
-  items,
-  data,
-  onObject,
-  onFinish,
-}: {
-  items: Submission[];
-  data: RoomData;
-  onObject: (submissionId: string) => Promise<void>;
-  onFinish: () => void;
-}) {
-  const [index, setIndex] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const current = items[index];
-
-  if (!current) {
-    return (
-      <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4">
-        <h2 className="text-2xl font-bold">이의제기 끝!</h2>
-        <p className="text-gray-600">모든 사진을 확인했어요</p>
-        <button onClick={onFinish} className="rounded-full bg-red-500 px-8 py-3 font-bold text-white active:scale-95">
-          확인
-        </button>
-      </motion.section>
-    );
-  }
-
-  const owner = playerOf(data, current.playerId);
-  const objectedByMe = (data.objections[current.id] ?? []).includes(data.me);
-  const next = () => setIndex((i) => i + 1);
-
-  return (
-    <motion.section
-      key={current.id}
-      initial={{ opacity: 0, x: 30 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -30 }}
-      className="flex w-full flex-col items-center gap-3"
-    >
-      <p className="text-sm text-gray-500">
-        이의제기 {index + 1} / {items.length}
-      </p>
-      <p className="rounded-xl bg-white px-4 py-2 font-bold shadow">
-        {data.missionTexts[current.id] ?? "미션"}
-      </p>
-      <Photo s={current} className="aspect-[3/4] w-full rounded-2xl" />
-      <p className="font-bold">
-        {owner?.emoji} {owner?.nickname}
-      </p>
-      <p className="text-sm text-gray-500">미션을 제대로 안 했다면 반대를 눌러요</p>
-      <div className="flex gap-3">
-        <button
-          disabled={busy}
-          onClick={next}
-          className="rounded-full bg-green-500 px-8 py-3 font-bold text-white active:scale-95 disabled:bg-gray-300"
-        >
-          인정
-        </button>
-        <button
-          disabled={busy || objectedByMe}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              await onObject(current.id);
-              next();
-            } catch (e) {
-              console.error(e);
-              alert("반대하지 못했어요. 다시 시도해 주세요.");
-            } finally {
-              setBusy(false);
-            }
-          }}
-          className="rounded-full bg-red-500 px-8 py-3 font-bold text-white active:scale-95 disabled:bg-gray-300"
-        >
-          반대
-        </button>
-      </div>
-    </motion.section>
-  );
-}
-
-// ---------- 투표 ----------
 function VoteScreen({
   category,
   stepLabel,
@@ -204,74 +98,11 @@ function VoteScreen({
   );
 }
 
-// ---------- 발표 (빰!) ----------
-function RevealStage({
-  title,
-  winner,
-  detail,
-  isLast,
-  onNext,
-}: {
-  title: string;
-  winner: Player;
-  detail: string;
-  isLast: boolean;
-  onNext: () => void;
-}) {
-  const [revealed, setRevealed] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setRevealed(true), 1500);
-    return () => clearTimeout(t);
-  }, []);
-
-  return (
-    <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex w-full flex-col items-center gap-4">
-      <h2 className="text-2xl font-bold">{title}</h2>
-      {!revealed ? (
-        <motion.p
-          animate={{ scale: [1, 1.15, 1] }}
-          transition={{ repeat: Infinity, duration: 0.6 }}
-          className="py-20 text-3xl font-bold text-gray-500"
-        >
-          두구두구두구...
-        </motion.p>
-      ) : (
-        <>
-          <motion.div
-            initial={{ scale: 0, rotate: -20 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 260, damping: 12 }}
-            className="text-9xl"
-          >
-            {winner.emoji}
-          </motion.div>
-          <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="text-3xl font-bold">
-            {winner.nickname}
-          </motion.p>
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="text-gray-600">
-            {detail}
-          </motion.p>
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.9 }}
-            onClick={onNext}
-            className="mt-4 rounded-full bg-red-500 px-8 py-3 font-bold text-white active:scale-95"
-          >
-            {isLast ? "결과 카드 보기" : "확인"}
-          </motion.button>
-        </>
-      )}
-    </motion.section>
-  );
-}
-
-// ---------- 전체 흐름 ----------
 type Phase = "objection" | "objWait" | "voteFunny" | "voteHard" | "waiting" | "reveal" | "share";
 
-function phaseFor(d: RoomData): Phase {
-  if (!d.objectionDone.includes(d.me)) return "objection";
-  if (!d.votes.funny[d.me]) return allObjectionDone(d) ? "voteFunny" : "objWait";
+function phaseFor(d: RoomData, hasOthers: boolean): Phase {
+  if (hasOthers && !d.objectionDone.includes(d.me)) return "objection";
+  if (!d.votes.funny[d.me]) return allObjectionDone(d) || !hasOthers ? "voteFunny" : "objWait";
   if (!d.votes.hard[d.me]) return "voteHard";
   return "waiting";
 }
@@ -285,22 +116,20 @@ export default function OneshotResult({
   data: RoomData;
   onReload: () => Promise<RoomData | null>;
 }) {
-  const [phase, setPhase] = useState<Phase>(() => phaseFor(data));
+  const others = useMemo(
+    () => data.submissions.filter((s) => s.playerId !== data.me),
+    [data]
+  );
+  const [phase, setPhase] = useState<Phase>(() => phaseFor(data, others.length > 0));
   const [revealIndex, setRevealIndex] = useState(0);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const failed = useMemo(() => failedIds(data), [data]);
-  const others = data.submissions.filter((s) => s.playerId !== data.me);
   const candidates = others.filter((s) => !failed.has(s.id)); // 실패한 미션은 후보 제외
+  const actions = makeObjectionActions(roomId, data, onReload);
 
-  // 대기 화면에서는 3초마다 새로고침
-  useEffect(() => {
-    if (phase !== "objWait" && phase !== "waiting") return;
-    const t = setInterval(onReload, 3000);
-    return () => clearInterval(t);
-  }, [phase, onReload]);
+  usePolling(phase === "objWait" || phase === "waiting", onReload);
 
-  // 모두 이의제기를 끝내면 투표로
   const objDone = allObjectionDone(data);
   useEffect(() => {
     if (phase === "objWait" && objDone) setPhase("voteFunny");
@@ -317,22 +146,6 @@ export default function OneshotResult({
       hard && { title: "가장 어려운 미션", winner: hard.player, detail: `${hard.count}표를 받았어요` },
     ].filter((x): x is { title: string; winner: Player; detail: string } => Boolean(x));
   }, [data, failed]);
-
-  const objectTo = async (submissionId: string) => {
-    await resultRepository.submitObjection(roomId, data.me, submissionId);
-    await onReload();
-  };
-
-  const finishObjection = async () => {
-    try {
-      await resultRepository.submitObjectionDone(roomId, data.me);
-      await onReload();
-      setPhase("objWait");
-    } catch (e) {
-      console.error(e);
-      alert("저장에 실패했어요. 다시 시도해 주세요.");
-    }
-  };
 
   const vote = async (category: VoteCategory, submissionId: string, nextPhase: Phase) => {
     try {
@@ -366,7 +179,15 @@ export default function OneshotResult({
     <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center overflow-hidden bg-amber-50 p-6 text-center">
       <AnimatePresence mode="wait">
         {phase === "objection" && (
-          <ObjectionStage key="objection" items={others} data={data} onObject={objectTo} onFinish={finishObjection} />
+          <ObjectionStage
+            key="objection"
+            items={others}
+            data={data}
+            onObject={actions.objectTo}
+            onFinish={async () => {
+              if (await actions.finish()) setPhase("objWait");
+            }}
+          />
         )}
 
         {phase === "objWait" && (

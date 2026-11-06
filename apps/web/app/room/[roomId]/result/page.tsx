@@ -6,6 +6,9 @@ import { useAuthState } from "../../../../src/lib/firebase/auth";
 import { RESULTS_NOT_OPEN, resultRepository } from "./repository";
 import type { RoomData } from "./types";
 import OneshotResult from "./modes/OneshotResult";
+import RaceResult from "./modes/RaceResult";
+import EndlessResult from "./modes/EndlessResult";
+import DailyResult from "./modes/DailyResult";
 
 const shell =
   "mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center bg-amber-50 p-6 text-center";
@@ -75,6 +78,12 @@ export default function ResultPage() {
   switch (data.mode) {
     case "oneshot":
       return <OneshotResult roomId={roomId} data={data} onReload={load} />;
+    case "race":
+      return <RaceResult roomId={roomId} data={data} onReload={load} />;
+    case "endless":
+      return <EndlessResult roomId={roomId} data={data} onReload={load} />;
+    case "daily":
+      return <DailyResult data={data} />;
     default:
       return (
         <main className={shell}>
