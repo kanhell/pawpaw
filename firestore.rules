@@ -54,12 +54,15 @@ service cloud.firestore {
     match /rooms/{roomId} {
       allow get: if isMember(roomId);
       allow list: if false;
+      // 방을 만들 때 모드(settings.mode)를 정한다. (docs/MODES.md)
       allow create: if signedIn()
         && request.resource.data.hostId == request.auth.uid
-        && request.resource.data.status == 'waiting';
-      // 방장만 수정할 수 있고, 방장 자체는 바꿀 수 없다.
+        && request.resource.data.status == 'waiting'
+        && request.resource.data.settings.mode in ['daily', 'oneshot', 'race', 'solo', 'endless'];
+      // 방장만 수정할 수 있고, 방장 자체와 모드는 바꿀 수 없다.
       allow update: if isHost(roomId)
-        && request.resource.data.hostId == resource.data.hostId;
+        && request.resource.data.hostId == resource.data.hostId
+        && request.resource.data.settings.mode == resource.data.settings.mode;
       allow delete: if false;
 
       // 방 멤버(Player). 문서 ID = Firebase Auth uid
