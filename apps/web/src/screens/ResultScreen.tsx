@@ -44,7 +44,7 @@ export default function ResultScreen() {
   const restart = () => setStep(0);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-app flex-col items-center justify-center overflow-hidden bg-canvas p-6 text-center">
+    <main className="mx-auto flex min-h-screen max-w-app flex-col items-center justify-center overflow-hidden p-6 text-center">
       <AnimatePresence mode="wait">
         {/* 0. 오프닝 */}
         {step === 0 && (

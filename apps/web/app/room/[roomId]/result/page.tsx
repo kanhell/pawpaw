@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { toPng } from "html-to-image";
+import ErrorView from "../../../../src/components/ErrorView";
+import { BlurBackdrop } from "../../../../src/components/ScreenShell";
 import { useAuthState } from "../../../../src/lib/firebase/auth";
 import { RESULTS_NOT_OPEN, resultRepository } from "./repository";
 import type { Player, RoomData, VoteCategory } from "./types";
@@ -275,39 +277,33 @@ export default function ResultPage() {
     }
   };
 
-  const shell = "mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center bg-amber-50 p-6 text-center";
+  const shell = "mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center p-6 text-center";
 
   if (auth.status === "error") {
-    return (
-      <main className={shell}>
-        <p className="text-gray-600">로그인에 실패했어요.</p>
-        <p className="mt-2 text-sm text-gray-400">{auth.message}</p>
-      </main>
-    );
+    return <ErrorView message="로그인에 실패했어요." detail={auth.message} />;
   }
   if (error === "notOpen") {
     return (
-      <main className={shell}>
-        <p className="text-gray-600">아직 결과 공개 전이거나 이 방의 멤버가 아니에요.</p>
-        <button onClick={load} className="mt-4 rounded-full bg-red-500 px-6 py-2 font-bold text-white">
+      <ErrorView message="아직 결과 공개 전이거나 이 방의 멤버가 아니에요.">
+        <button onClick={load} className="rounded-full bg-red-500 px-6 py-2 font-bold text-white">
           다시 확인
         </button>
-      </main>
+      </ErrorView>
     );
   }
   if (error === "failed") {
     return (
-      <main className={shell}>
-        <p className="text-gray-600">데이터를 불러오지 못했어요.</p>
-        <button onClick={load} className="mt-4 rounded-full bg-red-500 px-6 py-2 font-bold text-white">
+      <ErrorView message="데이터를 불러오지 못했어요.">
+        <button onClick={load} className="rounded-full bg-red-500 px-6 py-2 font-bold text-white">
           다시 시도
         </button>
-      </main>
+      </ErrorView>
     );
   }
   if (!data) {
     return (
       <main className={shell}>
+        <BlurBackdrop />
         <p className="text-gray-500">불러오는 중...</p>
       </main>
     );
@@ -319,6 +315,7 @@ export default function ResultPage() {
   if (candidates.length === 0 && phase.startsWith("vote")) {
     return (
       <main className={shell}>
+        <BlurBackdrop />
         <p className="text-gray-600">투표할 친구가 아직 없어요.</p>
       </main>
     );
@@ -329,6 +326,7 @@ export default function ResultPage() {
 
   return (
     <main className={`${shell} overflow-hidden`}>
+      <BlurBackdrop />
       <AnimatePresence mode="wait">
         {phase === "voteFunny" && (
           <VoteScreen

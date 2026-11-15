@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ROUTES } from "@pawpaw/shared";
+import ErrorView from "../components/ErrorView";
 import ProfileFields from "../components/ProfileFields";
 import ScreenShell from "../components/ScreenShell";
 import { ANIMALS } from "../lib/animals";
@@ -51,10 +52,10 @@ export default function InviteScreen() {
     window.location.href = plan.href;
   }, [plan, href]);
 
-  // 이미 참가한 사람이 링크를 다시 열면 대기실로 보낸다.
+  // 이미 참가한 사람이 링크를 다시 열면 방으로 보낸다.
   useEffect(() => {
     if (membership.status === "ready" && membership.data) {
-      router.replace(ROUTES.lobby(roomId));
+      router.replace(ROUTES.room(roomId));
     }
   }, [membership, roomId, router]);
 
@@ -78,7 +79,7 @@ export default function InviteScreen() {
     setBusy(true);
     try {
       await joinRoom(uid, roomId, code, { nickname: name, animal });
-      router.replace(ROUTES.lobby(roomId));
+      router.replace(ROUTES.room(roomId));
     } catch (e) {
       const errorCode = (e as { code?: string }).code ?? "";
       setError(
@@ -92,13 +93,11 @@ export default function InviteScreen() {
 
   if (!isValidInviteCode(code)) {
     return (
-      <ScreenShell>
-        <div className="text-6xl">🔗</div>
-        <h1 className="text-2xl font-bold">초대 링크가 올바르지 않아요</h1>
-        <p className="text-sm text-ink-muted">
-          방장에게 링크를 다시 받아 주세요.
-        </p>
-      </ScreenShell>
+      <ErrorView
+        icon="🔗"
+        title="초대 링크가 올바르지 않아요"
+        message="방장에게 링크를 다시 받아 주세요."
+      />
     );
   }
 
@@ -134,12 +133,7 @@ export default function InviteScreen() {
   }
 
   if (auth.status === "error") {
-    return (
-      <ScreenShell>
-        <p className="text-ink-muted">로그인하지 못했어요.</p>
-        <p className="text-sm text-ink-subtle">{auth.message}</p>
-      </ScreenShell>
-    );
+    return <ErrorView message="로그인하지 못했어요." detail={auth.message} />;
   }
   if (auth.status === "loading" || membership.status === "loading") {
     return (
@@ -149,16 +143,12 @@ export default function InviteScreen() {
     );
   }
   if (membership.status === "error") {
-    return (
-      <ScreenShell>
-        <p className="text-ink-muted">{membership.message}</p>
-      </ScreenShell>
-    );
+    return <ErrorView message={membership.message} />;
   }
   if (membership.data) {
     return (
       <ScreenShell>
-        <p className="text-ink-muted">대기실로 이동하는 중…</p>
+        <p className="text-ink-muted">방으로 이동하는 중…</p>
       </ScreenShell>
     );
   }

@@ -1,3 +1,9 @@
+import ScreenShell from "../components/ScreenShell";
+
 export default function ShareScreen() {
-  return <div>결과공유</div>;
+  return (
+    <ScreenShell>
+      <h1 className="text-2xl font-bold">결과공유</h1>
+    </ScreenShell>
+  );
 }

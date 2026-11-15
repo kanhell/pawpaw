@@ -1,3 +1,9 @@
+import ScreenShell from "../components/ScreenShell";
+
 export default function RoomListScreen() {
-  return <div>방찾기</div>;
+  return (
+    <ScreenShell>
+      <h1 className="text-2xl font-bold">방찾기</h1>
+    </ScreenShell>
+  );
 }

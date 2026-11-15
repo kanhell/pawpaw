@@ -1,27 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import {
-  ROUTES,
-  type MissionAssigner,
-  type MissionScope,
-  type MissionVisibility,
+import { useState } from "react";
+import type {
+  MissionAssigner,
+  MissionScope,
+  MissionVisibility,
+  Room,
 } from "@pawpaw/shared";
-import PhotoNotice from "../components/PhotoNotice";
-import ScreenShell from "../components/ScreenShell";
-import { fromDatetimeLocal, toDatetimeLocal } from "../lib/datetime";
-import { PRESET_MISSIONS } from "../lib/missions";
-import { useAuthState } from "../lib/firebase/auth";
-import { describeError } from "../lib/firebase/errors";
-import { useMembers, useNow, useRoom } from "../lib/firebase/hooks";
+import PhotoNotice from "../../components/PhotoNotice";
+import Popup from "../../components/Popup";
+import { fromDatetimeLocal, toDatetimeLocal } from "../../lib/datetime";
+import { PRESET_MISSIONS } from "../../lib/missions";
+import { describeError } from "../../lib/firebase/errors";
+import { useNow } from "../../lib/firebase/hooks";
 import {
   finishSettingsPhase,
   updateResultAt,
   updateRoomSettings,
   type RoomSettingsPatch,
-} from "../lib/firebase/roomRepo";
+} from "../../lib/firebase/roomRepo";
 
 interface Option<T extends string> {
   value: T;
@@ -62,7 +59,7 @@ function OptionGroup<T extends string>({
 }) {
   return (
     <section className="w-full rounded-sheet bg-surface p-5 text-left shadow-card">
-      <h2 className="font-bold">{title}</h2>
+      <h3 className="font-bold">{title}</h3>
       <ul className="mt-3 space-y-2">
         {options.map((option) => {
           const selected = option.value === value;
@@ -110,14 +107,17 @@ function formatResultTime(date: Date): string {
   });
 }
 
-// 게임 설정: 방장은 직접 설정하고, 참가자는 현재 설정을 실시간으로 본다.
-export default function GameSettingsScreen() {
-  const { roomId } = useParams<{ roomId: string }>();
-  const router = useRouter();
-  const auth = useAuthState();
-  const uid = auth.status === "signedIn" ? auth.uid : null;
-  const room = useRoom(roomId, uid);
-  const members = useMembers(roomId, uid);
+// 게임 설정 팝업 (phase = settings 동안 모두에게 뜨고 닫을 수 없다)
+// 방장은 직접 설정하고, 참가자는 현재 설정을 실시간으로 본다.
+export default function GameSettingsPopup({
+  room,
+  uid,
+  memberCount,
+}: {
+  room: Room;
+  uid: string;
+  memberCount: number;
+}) {
   const now = useNow();
 
   // null이면 저장된 값을 그대로 보여주고, 입력을 시작하면 입력 중인 값을 보여준다.
@@ -125,57 +125,11 @@ export default function GameSettingsScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 설정 단계가 아니면 맞는 화면으로 보낸다. (시작 전 → 대기실, 설정 완료 후 → 미션지정)
-  const current = room.status === "ready" ? room.data : null;
-  const redirectTo =
-    current === null
-      ? null
-      : current.status === "waiting"
-        ? ROUTES.lobby(roomId)
-        : current.phase !== "settings"
-          ? ROUTES.assign(roomId)
-          : null;
-  useEffect(() => {
-    if (redirectTo) router.replace(redirectTo);
-  }, [redirectTo, router]);
-
-  if (auth.status === "error") {
-    return (
-      <ScreenShell>
-        <p className="text-ink-muted">로그인하지 못했어요.</p>
-        <p className="text-sm text-ink-subtle">{auth.message}</p>
-      </ScreenShell>
-    );
-  }
-  if (room.status === "error") {
-    return (
-      <ScreenShell>
-        <div className="text-6xl">🚪</div>
-        <p className="text-ink-muted">{room.message}</p>
-        <Link href={ROUTES.roomNew} className="text-sm text-ink-subtle underline">
-          새 방 만들기
-        </Link>
-      </ScreenShell>
-    );
-  }
-  if (
-    auth.status === "loading" ||
-    room.status !== "ready" ||
-    room.data === null ||
-    redirectTo
-  ) {
-    return (
-      <ScreenShell>
-        <p className="text-ink-muted">{redirectTo ? "이동하는 중…" : "불러오는 중…"}</p>
-      </ScreenShell>
-    );
-  }
-
-  const roomData = room.data;
-  const isHost = roomData.hostId === uid;
-  const settings = roomData.settings;
-  const savedResult = roomData.resultAt ? new Date(roomData.resultAt) : null;
-  const resultInput = resultDraft ?? toDatetimeLocal(roomData.resultAt);
+  const roomId = room.id;
+  const isHost = room.hostId === uid;
+  const settings = room.settings;
+  const savedResult = room.resultAt ? new Date(room.resultAt) : null;
+  const resultInput = resultDraft ?? toDatetimeLocal(room.resultAt);
 
   // 저장된 결과 공개 시각이 미래이고, 입력 중인 값이 저장된 값과 같을 때만 완료할 수 있다.
   const draftDate = resultDraft === null ? null : fromDatetimeLocal(resultDraft);
@@ -183,7 +137,6 @@ export default function GameSettingsScreen() {
     resultDraft === null ||
     (draftDate !== null && savedResult !== null && draftDate.getTime() === savedResult.getTime());
   // 앱이 정하고 각자 다른 미션이면, 서로 겹치지 않게 줄 미션이 인원보다 많아야 한다.
-  const memberCount = members.status === "ready" ? members.data.length : 0;
   const poolShort =
     settings.assigner === "app" &&
     settings.scope === "different" &&
@@ -220,17 +173,18 @@ export default function GameSettingsScreen() {
   }
 
   async function handleFinish() {
+    // 버튼을 누른 순간의 시각으로 다시 확인한다. 렌더링 중이 아니라 이벤트 처리라 순수성 규칙과 무관하다(오탐).
+    // eslint-disable-next-line react-hooks/purity
     if (!savedResult || savedResult.getTime() <= Date.now()) {
       setError("결과 공개 시각을 지금보다 뒤로 정해 주세요.");
       return;
     }
+    // 앱이 정해주기면 다음 단계(assign)에서 방장 화면이 바로 미션을 뽑는다. (RoomScreen)
     await run(() => finishSettingsPhase(roomId));
   }
 
   return (
-    <ScreenShell>
-      <div className="text-6xl">⚙️</div>
-      <h1 className="text-2xl font-bold">게임 설정</h1>
+    <Popup title="⚙️ 게임 설정">
       <p className="text-sm text-ink-muted">
         {isHost
           ? "고른 내용은 바로 저장되고, 친구들 화면에도 보여요."
@@ -263,7 +217,7 @@ export default function GameSettingsScreen() {
       />
 
       <section className="w-full rounded-sheet bg-surface p-5 text-left shadow-card">
-        <h2 className="font-bold">결과 공개 시각</h2>
+        <h3 className="font-bold">결과 공개 시각</h3>
         <p className="mt-1 text-sm text-ink-muted">
           이 시각이 되면 모두의 사진과 시상식이 열려요.
         </p>
@@ -303,10 +257,8 @@ export default function GameSettingsScreen() {
           {busy ? "저장하는 중…" : "설정 완료"}
         </button>
       ) : (
-        <p className="text-sm text-ink-muted">
-          방장이 설정을 마치면 자동으로 넘어가요.
-        </p>
+        <p className="text-sm text-ink-muted">방장이 설정을 마치면 자동으로 넘어가요.</p>
       )}
-    </ScreenShell>
+    </Popup>
   );
 }

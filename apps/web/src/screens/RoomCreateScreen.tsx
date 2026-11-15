@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@pawpaw/shared";
+import ErrorView from "../components/ErrorView";
 import ProfileFields from "../components/ProfileFields";
 import ScreenShell from "../components/ScreenShell";
 import { ANIMALS } from "../lib/animals";
@@ -10,7 +11,7 @@ import { useAuthState } from "../lib/firebase/auth";
 import { describeError } from "../lib/firebase/errors";
 import { createRoom } from "../lib/firebase/roomRepo";
 
-// 임시 방 만들기 화면: 닉네임과 동물을 골라 방을 만들고 대기실로 이동한다.
+// 임시 방 만들기 화면: 닉네임과 동물을 골라 방을 만들고 방 화면으로 이동한다.
 // 방설정은 아직 없다.
 export default function RoomCreateScreen() {
   const router = useRouter();
@@ -21,12 +22,7 @@ export default function RoomCreateScreen() {
   const [error, setError] = useState<string | null>(null);
 
   if (auth.status === "error") {
-    return (
-      <ScreenShell>
-        <p className="text-ink-muted">로그인하지 못했어요.</p>
-        <p className="text-sm text-ink-subtle">{auth.message}</p>
-      </ScreenShell>
-    );
+    return <ErrorView message="로그인하지 못했어요." detail={auth.message} />;
   }
   if (auth.status === "loading") {
     return (
@@ -48,7 +44,7 @@ export default function RoomCreateScreen() {
     setBusy(true);
     try {
       const roomId = await createRoom(uid, { nickname: name, animal });
-      router.push(ROUTES.lobby(roomId));
+      router.push(ROUTES.room(roomId));
     } catch (e) {
       setError(describeError(e));
       setBusy(false);

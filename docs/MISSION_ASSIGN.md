@@ -1,13 +1,13 @@
 # 미션 부여 (MISSION_ASSIGN)
 
 기획은 `PLANNING.md`의 "미션 부여 방법 결정", 화면은 `ROUTES.md`, 데이터는 `DATA_MODEL.md`, 보안은 `SECURITY.md` 참고.
-게임 설정(`/room/:roomId/settings`)에서 방장이 정한 값이 미션지정(`/room/:roomId/assign`)에서 실제로 어떻게 쓰이는지 정리한다.
+게임 설정 팝업에서 방장이 정한 값이 미션 설정 단계(방 화면, `phase = assign`)에서 실제로 어떻게 쓰이는지 정리한다.
 
 ## 설정값이 반영되는 곳
 
 | 설정 | 값 | 반영되는 동작 |
 |---|---|---|
-| `assigner` | `app` | 방장이 **미션 뽑기**를 누르면 앱이 모두의 미션을 정한다. |
+| `assigner` | `app` | 설정을 마치면(`phase = assign`) 방장 화면이 바로 모두의 미션을 뽑는다. 뽑기 버튼은 없다. |
 | | `players` | 플레이어가 직접 미션을 적는다. (아래 "직접 부여") |
 | `scope` | `different` | 사람마다 다른 미션. `app`이면 **서로 겹치지 않게** 뽑고, `players`면 각자 다음 사람에게 적어 준다. |
 | | `same` | 모두가 같은 미션. `app`이면 앱이 하나를 뽑고, `players`면 방장이 하나를 적는다. |
@@ -20,7 +20,7 @@
 ```
 게임 설정 완료 (phase = assign)
  ├─ assigner = app
- │    방장: 미션 뽑기 → 배정 문서를 한 번에 만들고 phase = play
+ │    방장 화면이 자동으로 뽑기 → 배정 문서를 한 번에 만들고 phase = play
  └─ assigner = players
       scope = different: 각자 "다음 사람"에게 줄 미션을 적는다 → 모두 정하면 방장이 미션 공개하기 → phase = play
       scope = same:      방장이 모두가 할 미션 하나를 적는다   → 방장이 미션 공개하기 → phase = play

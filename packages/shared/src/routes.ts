@@ -1,13 +1,10 @@
 export const ROUTES = {
-  splash: '/',
+  home: '/', // 메인 (방만들기 / 방찾기)
   roomList: '/room',
   roomNew: '/room/new',
   roomSettings: '/room/new/settings',
-  lobby: (roomId: string) => `/room/${roomId}/lobby`,
-  settings: (roomId: string) => `/room/${roomId}/settings`,
-  assign: (roomId: string) => `/room/${roomId}/assign`,
-  reveal: (roomId: string) => `/room/${roomId}/reveal`,
-  play: (roomId: string) => `/room/${roomId}/play`,
+  // 방(대기실). 게임 설정·미션 설정·미션 도착·미션 수행은 이 화면의 팝업이다.
+  room: (roomId: string) => `/room/${roomId}`,
   result: (roomId: string) => `/room/${roomId}/result`,
   share: (roomId: string) => `/room/${roomId}/share`,
   invite: (roomId: string, code: string) => `/invite/${roomId}/${code}`,
