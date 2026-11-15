@@ -14,6 +14,7 @@
   --color-ink: #171717; /* 기본 글자 */
   --color-ink-muted: #4b5563; /* 보조 글자 */
   --color-ink-subtle: #6b7280; /* 가장 약한 글자 (카운터, 링크) */
+  --color-success: #15803d; /* 끝낸 상태 (제출함, 미션 정함) */
 
   /* Radius (pill은 기본 rounded-full 사용) */
   --radius-card: 1rem;

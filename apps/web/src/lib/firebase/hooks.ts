@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Assignment, Invite, Room, Submission } from "@pawpaw/shared";
+import type { JudgmentRecord } from "../judgment";
 import { describeError } from "./errors";
 import {
   checkMembership,
@@ -12,6 +13,10 @@ import {
   subscribeMySubmission,
   subscribeRoom,
   subscribeRoomAssignments,
+  subscribeTakenAnimals,
+  subscribeBoomDowns,
+  subscribeJudgments,
+  type BoomDown,
   type MemberProfile,
 } from "./roomRepo";
 
@@ -109,6 +114,31 @@ export function useMySubmission(
   return useSubscription(
     uid ? `submission:${roomId}:${uid}` : null,
     (onData, onError) => subscribeMySubmission(roomId, uid ?? "", onData, onError),
+  );
+}
+
+/** 미션 구경의 붐따 목록. 결과가 열린 뒤에만 읽을 수 있다. */
+export function useBoomDowns(roomId: string, uid: string | null, enabled: boolean): Loadable<BoomDown[]> {
+  return useSubscription(uid && enabled ? `boomdowns:${roomId}:${uid}` : null, (onData, onError) =>
+    subscribeBoomDowns(roomId, onData, onError),
+  );
+}
+
+/** 미션 구경의 인정 투표 목록. 결과가 열린 뒤에만 읽을 수 있다. */
+export function useJudgments(
+  roomId: string,
+  uid: string | null,
+  enabled: boolean,
+): Loadable<JudgmentRecord[]> {
+  return useSubscription(uid && enabled ? `judgments:${roomId}:${uid}` : null, (onData, onError) =>
+    subscribeJudgments(roomId, onData, onError),
+  );
+}
+
+/** 방에서 이미 누가 고른 동물 목록. 참가 화면에서 고를 수 없는 동물을 막을 때 쓴다. */
+export function useTakenAnimals(roomId: string, uid: string | null): Loadable<string[]> {
+  return useSubscription(uid ? `animals:${roomId}:${uid}` : null, (onData, onError) =>
+    subscribeTakenAnimals(roomId, onData, onError),
   );
 }
 

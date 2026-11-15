@@ -20,6 +20,7 @@
 | `--color-ink` | `#171717` | `text-ink` | 기본 글자 |
 | `--color-ink-muted` | `#4b5563` | `text-ink-muted` | 보조 글자 |
 | `--color-ink-subtle` | `#6b7280` | `text-ink-subtle` | 가장 약한 글자 |
+| `--color-success` | `#15803d` | `text-success` | 끝낸 상태 (제출함, 미션 정함). 오류·강조에 쓰는 primary(빨강)와 구분한다 |
 
 ## Radius
 

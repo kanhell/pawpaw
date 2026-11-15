@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   limit,
   onSnapshot,
   orderBy,
@@ -22,12 +23,15 @@ import type {
   Invite,
   MissionScope,
   Player,
+  ResultMode,
   Room,
   RoomSettings,
   Submission,
 } from "@pawpaw/shared";
 import { generateInviteCode } from "../invite/code";
+import type { JudgmentRecord } from "../judgment";
 import { MISSION_TEXT_MAX, pickDistinctMissions } from "../missions";
+import { DEFAULT_RESULT_HOUR, nextOccurrence } from "../resultTime";
 import { getFirebase } from "./client";
 
 /**
@@ -64,6 +68,8 @@ function toRoom(id: string, d: DocumentData): Room {
     deadlineAt: iso(d.deadlineAt),
     resultAt: iso(d.resultAt),
     createdAt: isoOrNow(d.createdAt),
+    ...(typeof d.showcaseIndex === "number" ? { showcaseIndex: d.showcaseIndex } : {}),
+    ...(typeof d.awardIndex === "number" ? { awardIndex: d.awardIndex } : {}),
   };
 }
 
@@ -77,6 +83,7 @@ function toPlayer(uid: string, roomId: string, d: DocumentData): Player {
     joinedAt: isoOrNow(d.joinedAt),
     ...(d.assignmentDone === true ? { assignmentDone: true } : {}),
     ...(d.submitted === true ? { submitted: true } : {}),
+    ...(d.resultEntered === true ? { resultEntered: true } : {}),
   };
 }
 
@@ -109,21 +116,38 @@ function toInvite(code: string, d: DocumentData): Invite {
     code,
     createdBy: d.createdBy,
     createdAt: isoOrNow(d.createdAt),
-    expiresAt: isoOrNow(d.expiresAt),
   };
 }
 
+// ---------- 동물 캐릭터 (방 안에서 겹치지 않게) ----------
+// rooms/{roomId}/animals/{동물} 문서가 있으면 그 동물은 이미 누가 고른 것이다.
+// 문서 ID가 동물 자체라서 같은 동물은 한 번만 만들 수 있다. (firestore.rules)
+function animalRef(roomId: string, animal: string) {
+  const { db } = getFirebase();
+  return doc(db, "rooms", roomId, "animals", animal);
+}
+
 // ---------- 방 만들기 ----------
+// 새 방 id를 미리 정한다. (서버에 아무것도 쓰지 않는다)
+// 방을 만들기 전에 초대 링크 주소를 알아야 '방 만들기'를 누른 순간 바로 복사할 수 있다.
+export function newRoomId(): string {
+  const { db } = getFirebase();
+  return doc(collection(db, "rooms")).id;
+}
+
+// inviteCode를 주면 첫 초대 링크도 같은 batch로 만든다.
 export async function createRoom(
   uid: string,
   profile: { nickname: string; animal: string },
+  options: { roomId?: string; inviteCode?: string } = {},
 ): Promise<string> {
   const { db } = getFirebase();
-  const roomRef = doc(collection(db, "rooms"));
+  const roomRef = options.roomId ? doc(db, "rooms", options.roomId) : doc(collection(db, "rooms"));
   const roomId = roomRef.id;
 
+  // 기본값: 서로 정해주기 · 본인만 확인 · 각자 다른 미션
   const settings: RoomSettings = {
-    assigner: "app",
+    assigner: "players",
     visibility: "private",
     scope: "different",
   };
@@ -149,6 +173,7 @@ export async function createRoom(
     deadlineAt: null,
     resultAt: null,
     createdAt: serverTimestamp(),
+    memberCount: 1,
   });
   batch.set(doc(db, "rooms", roomId, "members", uid), {
     id: uid,
@@ -158,6 +183,14 @@ export async function createRoom(
     isHost: true,
     joinedAt: serverTimestamp(),
   });
+  batch.set(animalRef(roomId, profile.animal), { uid });
+  if (options.inviteCode) {
+    batch.set(doc(db, "rooms", roomId, "invites", options.inviteCode), {
+      code: options.inviteCode,
+      createdBy: uid,
+      createdAt: serverTimestamp(),
+    });
+  }
   await batch.commit();
   return roomId;
 }
@@ -262,12 +295,20 @@ export type RoomSettingsPatch = Partial<
 >;
 
 // 게임 시작: 설정 단계로 들어간다. playing이 되면 새 참가는 받지 않는다. (규칙: 참가는 waiting일 때만)
-export async function startSettingsPhase(roomId: string): Promise<void> {
+// 게임을 시작하면 초대 링크를 모두 폐기한다. (같은 batch라 시작과 폐기가 함께 된다)
+// 결과 공개 시각은 기본값으로 오후 6시(오늘, 지났으면 내일)를 넣어 둔다.
+export async function startSettingsPhase(roomId: string, now: Date = new Date()): Promise<void> {
   const { db } = getFirebase();
-  await updateDoc(doc(db, "rooms", roomId), {
+  const invites = await getDocs(collection(db, "rooms", roomId, "invites"));
+  const batch = writeBatch(db);
+  invites.docs.forEach((invite) => batch.delete(invite.ref));
+  batch.update(doc(db, "rooms", roomId), {
     status: "playing",
     phase: "settings",
+    "settings.resultMode": "preset",
+    resultAt: Timestamp.fromDate(nextOccurrence(DEFAULT_RESULT_HOUR, 0, now)),
   });
+  await batch.commit();
 }
 
 // 미션 부여 방법 같은 설정을 바꾼다. settings 하위 필드만 건드린다.
@@ -284,15 +325,19 @@ export async function updateRoomSettings(
   await updateDoc(doc(db, "rooms", roomId), updates);
 }
 
-// 결과 공개 시각. 규칙이 Timestamp 타입을 비교하므로 Timestamp로 저장한다.
-export async function updateResultAt(
+// 결과 공개 방식과 시각. 규칙이 Timestamp 타입을 비교하므로 시각은 Timestamp로 저장한다.
+// - resultAt을 넘기지 않으면 저장된 시각은 그대로 둔다. ('직접 설정'을 눌렀지만 아직 시각을 안 고른 경우)
+// - 방장이 직접 공개하는 방식(host)은 시각을 비운다. 공개할 때 revealResultsNow가 채운다.
+export async function updateResultSetting(
   roomId: string,
-  resultAt: Date,
+  mode: ResultMode,
+  resultAt?: Date,
 ): Promise<void> {
   const { db } = getFirebase();
-  await updateDoc(doc(db, "rooms", roomId), {
-    resultAt: Timestamp.fromDate(resultAt),
-  });
+  const updates: Record<string, unknown> = { "settings.resultMode": mode };
+  if (mode === "host") updates.resultAt = null;
+  else if (resultAt) updates.resultAt = Timestamp.fromDate(resultAt);
+  await updateDoc(doc(db, "rooms", roomId), updates);
 }
 
 // 설정을 마치고 미션지정 단계로 넘어간다.
@@ -439,7 +484,8 @@ export async function revealMissions(roomId: string): Promise<void> {
 }
 
 // ---------- 초대 ----------
-const INVITE_LIFETIME_MS = 24 * 60 * 60 * 1000; // 초대 링크 유효 시간: 24시간
+// 초대 링크는 만료 시각이 없다. 게임을 시작하면 폐기되고(startSettingsPhase),
+// 규칙도 대기 중(waiting)인 방에만 참가를 허용한다.
 
 // 방장만 호출한다. 이전 초대 링크는 모두 폐기하고 새 링크 코드를 만든다.
 export async function renewInvite(roomId: string, uid: string): Promise<string> {
@@ -454,7 +500,6 @@ export async function renewInvite(roomId: string, uid: string): Promise<string> 
     code,
     createdBy: uid,
     createdAt: serverTimestamp(),
-    expiresAt: Timestamp.fromDate(new Date(Date.now() + INVITE_LIFETIME_MS)),
   });
   await batch.commit();
   return code;
@@ -536,7 +581,31 @@ export async function joinRoom(
     joinedAt: serverTimestamp(),
     inviteCode,
   });
+  // 같은 동물을 이미 누가 골랐다면 이 문서가 이미 있어서 규칙이 batch 전체를 거부한다.
+  batch.set(animalRef(roomId, profile.animal), { uid });
+  // 멤버 수를 1 늘린다. 규칙은 멤버 문서를 새로 만드는 같은 batch에서만 이것을 허용한다.
+  batch.update(doc(db, "rooms", roomId), { memberCount: increment(1) });
   await batch.commit();
+}
+
+// 이 동물을 방에서 이미 누가 골랐는지 확인한다. (참가가 거부됐을 때 이유를 알려 주려고 쓴다)
+export async function isAnimalTaken(roomId: string, animal: string): Promise<boolean> {
+  const snap = await getDoc(animalRef(roomId, animal));
+  return snap.exists();
+}
+
+// 방에서 이미 누가 고른 동물 목록. 참가 전(멤버가 아닐 때)에도 읽을 수 있다.
+export function subscribeTakenAnimals(
+  roomId: string,
+  onData: OnData<string[]>,
+  onError: OnError,
+): Unsubscribe {
+  const { db } = getFirebase();
+  return onSnapshot(
+    collection(db, "rooms", roomId, "animals"),
+    (snap) => onData(snap.docs.map((d) => d.id)),
+    onError,
+  );
 }
 
 // ---------- 제출 현황과 결과 공개 (docs/RESULT_REVEAL.md) ----------
@@ -545,6 +614,12 @@ export async function joinRoom(
 export async function markSubmitted(roomId: string, uid: string): Promise<void> {
   const { db } = getFirebase();
   await updateDoc(doc(db, "rooms", roomId, "members", uid), { submitted: true });
+}
+
+// 결과 화면에 들어왔다고 표시한다. 모두 들어와야 방장이 미션 구경을 시작할 수 있다.
+export async function markResultEntered(roomId: string, uid: string): Promise<void> {
+  const { db } = getFirebase();
+  await updateDoc(doc(db, "rooms", roomId, "members", uid), { resultEntered: true });
 }
 
 // 방장이 정해 둔 결과 시각(resultAt)이 되기 전에 결과를 먼저 공개한다.
@@ -558,6 +633,86 @@ export async function revealResultsNow(roomId: string): Promise<void> {
     resultAt: serverTimestamp(),
     deadlineAt: serverTimestamp(),
   });
+}
+
+// 방장만 호출한다. 결과 화면의 '미션 구경'을 시작(0)하거나 다음 친구로 넘긴다. 모두의 화면이 이 값을 따라간다.
+export async function setShowcaseIndex(roomId: string, index: number): Promise<void> {
+  const { db } = getFirebase();
+  await updateDoc(doc(db, "rooms", roomId), { showcaseIndex: index });
+}
+
+// 방장만 호출한다. 결과 화면의 시상식을 시작(0)하거나 다음 상으로 넘긴다. 모두의 화면이 이 값을 따라간다.
+export async function setAwardIndex(roomId: string, index: number): Promise<void> {
+  const { db } = getFirebase();
+  await updateDoc(doc(db, "rooms", roomId), { awardIndex: index });
+}
+
+// ---------- 붐따 (미션 구경에서 '별로예요') ----------
+// 문서 ID = 받는사람uid_누른사람uid. 한 사람에게 한 번만 누를 수 있다. (firestore.rules)
+export interface BoomDown {
+  targetId: string;
+  voterId: string;
+}
+
+export async function boomDown(roomId: string, uid: string, targetId: string): Promise<void> {
+  const { db } = getFirebase();
+  await setDoc(doc(db, "rooms", roomId, "boomdowns", `${targetId}_${uid}`), {
+    targetId,
+    voterId: uid,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export function subscribeBoomDowns(
+  roomId: string,
+  onData: OnData<BoomDown[]>,
+  onError: OnError,
+): Unsubscribe {
+  const { db } = getFirebase();
+  return onSnapshot(
+    collection(db, "rooms", roomId, "boomdowns"),
+    (snap) =>
+      onData(
+        snap.docs.map((d) => ({ targetId: d.data().targetId, voterId: d.data().voterId })),
+      ),
+    onError,
+  );
+}
+
+// ---------- 인정 투표 (붐따가 30% 이상이면 열린다) ----------
+export async function judgeMission(
+  roomId: string,
+  uid: string,
+  targetId: string,
+  accept: boolean,
+): Promise<void> {
+  const { db } = getFirebase();
+  await setDoc(doc(db, "rooms", roomId, "judgments", `${targetId}_${uid}`), {
+    targetId,
+    voterId: uid,
+    accept,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export function subscribeJudgments(
+  roomId: string,
+  onData: OnData<JudgmentRecord[]>,
+  onError: OnError,
+): Unsubscribe {
+  const { db } = getFirebase();
+  return onSnapshot(
+    collection(db, "rooms", roomId, "judgments"),
+    (snap) =>
+      onData(
+        snap.docs.map((d) => ({
+          targetId: d.data().targetId,
+          voterId: d.data().voterId,
+          accept: d.data().accept === true,
+        })),
+      ),
+    onError,
+  );
 }
 
 // ---------- 사진 ----------

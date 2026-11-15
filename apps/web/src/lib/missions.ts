@@ -28,21 +28,17 @@ export function getMission(missionId: string): Mission | undefined {
 // 미션을 화면에 보여줄 형태로 바꾼다. 기본 제공 미션과 직접 정한 미션을 함께 다룬다.
 export interface MissionView {
   text: string;
-  label: string; // 미션 위에 작게 보여줄 분류
 }
 
 export function describeAssignmentMission(
   assignment: Pick<Assignment, "missionId" | "missionText">,
 ): MissionView | undefined {
   if (assignment.missionText) {
-    return { text: assignment.missionText, label: "직접 정한 미션" };
+    return { text: assignment.missionText };
   }
   const mission = assignment.missionId ? getMission(assignment.missionId) : undefined;
   if (!mission) return undefined;
-  return {
-    text: mission.text,
-    label: `${mission.category} · ${"★".repeat(mission.difficulty)}`,
-  };
+  return { text: mission.text };
 }
 
 // 서로 다른 미션을 줄 수 없을 만큼 미션이 모자란 경우

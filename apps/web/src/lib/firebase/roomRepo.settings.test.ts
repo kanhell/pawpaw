@@ -4,7 +4,7 @@ import {
   assignRandomMissions,
   finishSettingsPhase,
   startSettingsPhase,
-  updateResultAt,
+  updateResultSetting,
   updateRoomSettings,
 } from "./roomRepo";
 
@@ -14,8 +14,9 @@ import {
  * 실제 규칙이 동작하는지는 이 테스트로 알 수 없다. (docs/SECURITY.md "배포 전 확인")
  */
 const m = vi.hoisted(() => ({
-  batch: { set: vi.fn(), update: vi.fn(), commit: vi.fn() },
+  batch: { set: vi.fn(), update: vi.fn(), delete: vi.fn(), commit: vi.fn() },
   updateDoc: vi.fn(),
+  getDocs: vi.fn(),
 }));
 
 vi.mock("firebase/firestore", () => {
@@ -35,6 +36,8 @@ vi.mock("firebase/firestore", () => {
       id: segments[segments.length - 1],
       path: segments.join("/"),
     }),
+    collection: (_db: unknown, ...segments: string[]) => ({ path: segments.join("/") }),
+    getDocs: m.getDocs,
     writeBatch: () => m.batch,
     updateDoc: m.updateDoc,
   };
@@ -53,13 +56,30 @@ beforeEach(() => {
 });
 
 describe("게임 설정", () => {
-  it("게임 시작은 설정 단계로 넘어간다 (playing이라 새 참가는 막힌다)", async () => {
+  it("게임 시작은 설정 단계로 넘어가고 초대 링크를 모두 폐기한다", async () => {
+    const invite = { ref: { path: "rooms/room1/invites/A" } };
+    m.getDocs.mockResolvedValue({ docs: [invite] });
+
     await startSettingsPhase("room1");
 
-    expect(m.updateDoc).toHaveBeenCalledWith(
+    expect(m.batch.delete).toHaveBeenCalledWith(invite.ref);
+    expect(m.batch.update).toHaveBeenCalledWith(
       expect.objectContaining({ path: "rooms/room1" }),
-      { status: "playing", phase: "settings" },
+      expect.objectContaining({ status: "playing", phase: "settings" }),
     );
+    expect(m.batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("결과 공개 시각의 기본값은 오후 6시이고, 지났으면 내일 6시다", async () => {
+    m.getDocs.mockResolvedValue({ docs: [] });
+
+    await startSettingsPhase("room1", new Date(2026, 10, 15, 12));
+    const before = m.batch.update.mock.calls[0][1];
+    expect(before["settings.resultMode"]).toBe("preset");
+    expect(before.resultAt.toDate()).toEqual(new Date(2026, 10, 15, 18));
+
+    await startSettingsPhase("room1", new Date(2026, 10, 15, 19));
+    expect(m.batch.update.mock.calls[1][1].resultAt.toDate()).toEqual(new Date(2026, 10, 16, 18));
   });
 
   it("설정은 settings 하위 필드만 바꾼다", async () => {
@@ -76,14 +96,30 @@ describe("게임 설정", () => {
     expect(m.updateDoc).not.toHaveBeenCalled();
   });
 
-  it("결과 공개 시각은 Timestamp로 저장한다", async () => {
+  it("결과 공개 방식과 시각(Timestamp)을 함께 저장한다", async () => {
     const date = new Date("2026-10-30T12:00:00Z");
-    await updateResultAt("room1", date);
+    await updateResultSetting("room1", "preset", date);
 
     const [refArg, data] = m.updateDoc.mock.calls[0];
     expect(refArg.path).toBe("rooms/room1");
+    expect(data["settings.resultMode"]).toBe("preset");
     expect(data.resultAt).toBeInstanceOf(Timestamp);
     expect(data.resultAt.toDate().getTime()).toBe(date.getTime());
+  });
+
+  it("시각을 넘기지 않으면 방식만 바꾸고 저장된 시각은 그대로 둔다", async () => {
+    await updateResultSetting("room1", "custom");
+
+    expect(m.updateDoc.mock.calls[0][1]).toEqual({ "settings.resultMode": "custom" });
+  });
+
+  it("방장이 직접 공개하는 방식이면 결과 공개 시각을 비운다", async () => {
+    await updateResultSetting("room1", "host", new Date());
+
+    expect(m.updateDoc.mock.calls[0][1]).toEqual({
+      "settings.resultMode": "host",
+      resultAt: null,
+    });
   });
 
   it("설정을 마치면 미션지정 단계로 넘어간다", async () => {

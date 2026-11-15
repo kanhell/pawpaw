@@ -44,8 +44,11 @@ Room 1 ── N Award N ── 1 Player
 | status | RoomStatus | `finished`는 방장이 결과를 먼저 공개하면 바뀐다 (`RESULT_REVEAL.md`) |
 | phase | RoomPhase \| null | `status = playing`일 때만 값이 있음. 게임 시작 직후에는 `settings` |
 | deadlineAt | timestamp \| null | 미션 수행 마감. 방장이 결과를 먼저 공개하면 그 시각으로 채워진다 |
-| resultAt | timestamp \| null | 결과 공개 시각(n시). 게임 설정에서 방장이 정하며, 지금보다 뒤여야 설정을 완료할 수 있음. 비어 있으면 결과는 열리지 않음. 방장이 먼저 공개하면 그 시각으로 바뀐다 |
+| resultAt | timestamp \| null | 결과 공개 시각. 게임 설정에서 방장이 정하며, 지금보다 뒤여야 설정을 완료할 수 있음 (`resultMode = host`면 비워 둔 채 완료할 수 있음). 비어 있으면 결과는 열리지 않음. 방장이 먼저 공개하면 그 시각으로 바뀐다 |
 | createdAt | timestamp | |
+| memberCount | number | 참가한 멤버 수. 방장 1로 만들고, 참가할 때 같은 batch에서 1씩 늘린다. 규칙이 게임 시작 인원(3명 이상)을 이 값으로 확인한다 |
+| showcaseIndex | number (선택) | 결과 화면 '미션 구경'에서 보여주는 친구 순번(0부터). 방장이 넘긴다. 없으면 시작 전(모두 들어오길 기다림), 사진을 낸 친구 수 이상이면 투표 시작 (`RESULT_REVEAL.md`) |
+| awardIndex | number (선택) | 결과 화면 시상식에서 보여주는 상 순번(0부터). 방장이 넘기고 모두 같이 본다. 없으면 공개 전, 상 개수 이상이면 결과 카드 (`RESULT_REVEAL.md`) |
 
 ### RoomSettings
 | 필드 | 타입 | 비고 |
@@ -53,6 +56,7 @@ Room 1 ── N Award N ── 1 Player
 | assigner | MissionAssigner | |
 | visibility | MissionVisibility | |
 | scope | MissionScope | |
+| resultMode | `preset` \| `custom` \| `host` (선택) | 결과 공개 방식. `preset`은 오후 6·8·10시 중 하나(오늘, 지났으면 내일), `custom`은 방장이 직접 정한 시각(날짜는 선택), `host`는 시각 없이 방장이 직접 공개(`resultAt`은 공개할 때까지 null). 없으면 아직 고르지 않은 것 |
 
 ### Player
 방 안의 사용자. `User`를 참조한다.
@@ -132,9 +136,18 @@ Room 1 ── N Award N ── 1 Player
 | code | string | 영숫자 24자. 문서 ID와 같다 |
 | createdBy | string | 방장의 User id |
 | createdAt | timestamp | 서버 시각 |
-| expiresAt | timestamp | 만든 시각 + 24시간 (규칙상 최대 7일) |
 
-방장만 만들고 조회하고 폐기할 수 있다.
+방장만 만들고 조회하고 폐기할 수 있다. 만료 시각은 없고, 게임을 시작하면 모두 폐기된다. (규칙도 `waiting`인 방에만 참가를 허용한다)
+
+### 방 안의 동물 (`rooms/{roomId}/animals/{동물}`)
+방에서 누가 어떤 동물을 골랐는지 표시한다. 문서 ID가 동물 자체라 같은 동물은 한 번만 만들 수 있다.
+방 만들기·참가할 때 멤버 문서와 같은 batch로 만들고, 참가한 뒤에는 동물을 바꾸지 않는다.
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| uid | string | 이 동물을 고른 사람 |
+
+참가 전에도 남은 동물을 보여줄 수 있게 로그인한 사람은 읽을 수 있다.
 
 ### Award
 시상 결과.

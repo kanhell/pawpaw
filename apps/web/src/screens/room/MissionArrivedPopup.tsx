@@ -15,10 +15,9 @@ export default function MissionArrivedPopup({
 }) {
   const mission = describeAssignmentMission(assignment);
   return (
-    <Popup title="✉️ 미션이 도착했어요">
+    <Popup title="미션이 도착했어요">
       <div className="w-full rounded-sheet bg-surface p-6 shadow-float">
-        <p className="text-sm text-ink-subtle">{mission?.label ?? "내 미션"}</p>
-        <p className="mt-3 text-xl font-bold">
+        <p className="text-xl font-bold">
           {mission?.text ?? "미션을 불러오지 못했어요"}
         </p>
       </div>

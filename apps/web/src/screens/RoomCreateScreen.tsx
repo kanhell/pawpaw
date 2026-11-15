@@ -9,7 +9,20 @@ import ScreenShell from "../components/ScreenShell";
 import { ANIMALS } from "../lib/animals";
 import { useAuthState } from "../lib/firebase/auth";
 import { describeError } from "../lib/firebase/errors";
-import { createRoom } from "../lib/firebase/roomRepo";
+import { createRoom, newRoomId } from "../lib/firebase/roomRepo";
+import { generateInviteCode } from "../lib/invite/code";
+import { markRoomCreated } from "./room/roomCreated";
+
+function copyText(text: string): Promise<boolean> {
+  try {
+    return navigator.clipboard.writeText(text).then(
+      () => true,
+      () => false,
+    );
+  } catch {
+    return Promise.resolve(false);
+  }
+}
 
 // 임시 방 만들기 화면: 닉네임과 동물을 골라 방을 만들고 방 화면으로 이동한다.
 // 방설정은 아직 없다.
@@ -42,8 +55,14 @@ export default function RoomCreateScreen() {
     }
     setError(null);
     setBusy(true);
+    // 방 id와 초대 코드를 먼저 정해, 누른 순간 바로 초대 링크를 복사한다.
+    // (await 뒤에 복사하면 iOS Safari 등이 클립보드 쓰기를 막는다)
+    const roomId = newRoomId();
+    const inviteCode = generateInviteCode();
+    const copying = copyText(`${window.location.origin}${ROUTES.invite(roomId, inviteCode)}`);
     try {
-      const roomId = await createRoom(uid, { nickname: name, animal });
+      await createRoom(uid, { nickname: name, animal }, { roomId, inviteCode });
+      markRoomCreated(roomId, await copying);
       router.push(ROUTES.room(roomId));
     } catch (e) {
       setError(describeError(e));

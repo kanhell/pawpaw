@@ -26,13 +26,12 @@ describe("describeAssignmentMission", () => {
   it("직접 정한 미션은 본문을 그대로 보여준다", () => {
     expect(
       describeAssignmentMission({ missionId: null, missionText: "하늘 사진 찍기" }),
-    ).toEqual({ text: "하늘 사진 찍기", label: "직접 정한 미션" });
+    ).toEqual({ text: "하늘 사진 찍기" });
   });
 
-  it("기본 제공 미션은 분류와 난이도를 함께 보여준다", () => {
+  it("기본 제공 미션은 본문을 보여준다", () => {
     expect(describeAssignmentMission({ missionId: "m03" })).toEqual({
       text: "꽃 사진 찍기",
-      label: "사진 · ★",
     });
   });
 

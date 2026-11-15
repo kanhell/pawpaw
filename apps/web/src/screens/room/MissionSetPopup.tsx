@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Room } from "@pawpaw/shared";
-import PhotoNotice from "../../components/PhotoNotice";
+import BottomButton from "../../components/BottomButton";
 import Popup from "../../components/Popup";
 import { describeError } from "../../lib/firebase/errors";
 import {
@@ -13,19 +13,6 @@ import {
 } from "../../lib/firebase/roomRepo";
 import { MISSION_TEXT_MAX } from "../../lib/missions";
 import { receiverOf, ringOrder } from "../../lib/pairing";
-
-// 누가 미션을 정했는지 보여주는 현황
-function ProgressList({ profiles }: { profiles: MemberProfile[] }) {
-  return (
-    <ul className="flex flex-wrap justify-center gap-2">
-      {profiles.map(({ player, nickname }) => (
-        <li key={player.id} className="rounded-full bg-surface px-4 py-2 text-sm shadow-card">
-          {player.assignmentDone ? "✅" : "⏳"} {player.animal} {nickname}
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 // 미션 설정 팝업 (phase = assign, assigner = players 동안 모두에게 뜨고 닫을 수 없다)
 // - 각자 다른 미션: 참가 순서대로 다음 사람에게 줄 미션을 각자 적는다.
@@ -51,7 +38,6 @@ export default function MissionSetPopup({
 
   const byId = new Map(members.map((profile) => [profile.player.id, profile] as const));
   const ordered = ringOrder(members.map((profile) => profile.player));
-  const orderedProfiles = ordered.flatMap((player) => byId.get(player.id) ?? []);
   const doneCount = ordered.filter((player) => player.assignmentDone === true).length;
   const iDone = ordered.find((player) => player.id === uid)?.assignmentDone === true;
   const hostDone = ordered.find((player) => player.id === hostId)?.assignmentDone === true;
@@ -64,6 +50,9 @@ export default function MissionSetPopup({
       ? "나"
       : `${targetProfile.player.animal} ${targetProfile.nickname}`
     : "친구";
+  // 보내기 버튼에 쓰는 받는 사람 이름. 버튼이 커지지 않도록 동물은 빼고 닉네임만 쓴다.
+  const sendTo =
+    scope === "same" ? "모두" : target?.id === uid ? "나" : (targetProfile?.nickname ?? "친구");
 
   // 성공하면 true를 돌려준다.
   async function run(action: () => Promise<void>): Promise<boolean> {
@@ -106,7 +95,7 @@ export default function MissionSetPopup({
   const title =
     scope === "different"
       ? iDone
-        ? "미션을 정해줬어요"
+        ? "미션을 보냈어요"
         : `${targetLabel}의 미션을 정해주세요`
       : isHost
         ? hostDone
@@ -117,9 +106,26 @@ export default function MissionSetPopup({
           : "방장이 미션을 정하고 있어요";
 
   return (
-    <Popup title={`✍️ ${title}`}>
-      <PhotoNotice />
-
+    <Popup
+      title={title}
+      action={
+        isHost && (
+          <BottomButton
+            onClick={() => run(() => revealMissions(roomId))}
+            disabled={busy}
+            blockedReason={
+              allDone
+                ? null
+                : scope === "same"
+                  ? "아직 미션을 정하지 않았어요."
+                  : "아직 모두가 미션을 설정하지 않았어요."
+            }
+          >
+            미션 공개하기
+          </BottomButton>
+        )
+      }
+    >
       {canType && (
         <div className="flex w-full flex-col items-center gap-3">
           <input
@@ -132,41 +138,39 @@ export default function MissionSetPopup({
           <p className="text-xs text-ink-subtle">
             {text.length} / {MISSION_TEXT_MAX}
           </p>
+          {/* 버튼 폭은 카드에 맞춰 고정하고, 긴 닉네임(최대 12자)은 말줄임으로 자른다. */}
           <button
             onClick={handleGive}
             disabled={busy}
-            className="rounded-full bg-primary px-8 py-3 text-lg font-bold text-primary-foreground active:scale-95 disabled:opacity-50"
+            className="flex w-full items-center justify-center rounded-full bg-primary px-6 py-3 font-bold text-primary-foreground active:scale-95 disabled:opacity-50"
           >
-            {busy ? "저장하는 중…" : "정했어요"}
+            {busy ? (
+              "보내는 중…"
+            ) : (
+              <>
+                <span className="min-w-0 truncate">{sendTo}</span>
+                <span className="shrink-0">에게 미션 보내기</span>
+              </>
+            )}
           </button>
         </div>
       )}
 
       {!canType && scope === "different" && (
-        <p className="text-sm text-ink-muted">
-          다른 친구들이 정하는 중이에요. ({doneCount}/{ordered.length})
-        </p>
+        <p className="text-sm text-ink-muted">다른 친구들이 정하는 중이에요.</p>
       )}
       {!canType && scope === "same" && !hostDone && (
         <p className="text-sm text-ink-muted">미션이 정해지면 방장이 공개해 줘요.</p>
       )}
 
-      {scope === "different" && <ProgressList profiles={orderedProfiles} />}
+      {/* 누가 정했는지는 보여주지 않고, 정한 인원수만 보여준다. */}
+      {scope === "different" && (
+        <p className="text-sm font-bold">
+          {doneCount}/{ordered.length}명이 정했어요
+        </p>
+      )}
 
       {error && <p className="text-sm text-primary">{error}</p>}
-
-      {isHost && (
-        <div className="flex flex-col items-center gap-2">
-          <button
-            onClick={() => run(() => revealMissions(roomId))}
-            disabled={busy || !allDone}
-            className="rounded-full bg-primary px-8 py-3 text-lg font-bold text-primary-foreground active:scale-95 disabled:opacity-50"
-          >
-            미션 공개하기
-          </button>
-          {!allDone && <p className="text-xs text-ink-subtle">모두 정하면 공개할 수 있어요.</p>}
-        </div>
-      )}
     </Popup>
   );
 }

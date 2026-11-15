@@ -7,12 +7,15 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import type { Vote, VoteCategory } from "@pawpaw/shared";
+import { describeAssignmentMission } from "../missions";
 import { getFirebase } from "./client";
 import { subscribeMembers, type MemberProfile } from "./roomRepo";
 
 // ---------- 결과 화면용 타입 (저장 모델이 아니라 화면에서 쓰기 좋게 모은 형태) ----------
-export type ResultPlayer = { id: string; nickname: string; emoji: string };
-export type ResultSubmission = { playerId: string; submittedAt: number };
+// mission: 이 친구가 받은 미션 본문 (투표할 때 사진과 함께 보여준다)
+export type ResultPlayer = { id: string; nickname: string; emoji: string; mission?: string };
+// photoPath: Storage의 인증 사진 경로. 결과가 열린 뒤에는 같은 방 멤버가 읽을 수 있다.
+export type ResultSubmission = { playerId: string; submittedAt: number; photoPath?: string };
 // { funny: { 투표한사람id: 고른사람id }, hard: { ... } }
 export type ResultVotes = Record<VoteCategory, Record<string, string>>;
 
@@ -71,22 +74,36 @@ const firebaseResultRepository: ResultRepository = {
   async getRoomData(roomId, me) {
     const { db } = getFirebase();
     try {
-      const [members, subSnap, voteSnap] = await Promise.all([
+      const [members, subSnap, voteSnap, assignSnap] = await Promise.all([
         fetchMembers(roomId),
         getDocs(collection(db, "rooms", roomId, "submissions")),
         getDocs(collection(db, "rooms", roomId, "votes")),
+        getDocs(collection(db, "rooms", roomId, "assignments")),
       ]);
+
+      // 받는 사람 id → 미션 본문
+      const missionOf = new Map<string, string>();
+      assignSnap.docs.forEach((d) => {
+        const a = d.data();
+        const view = describeAssignmentMission({
+          missionId: a.missionId ?? null,
+          missionText: typeof a.missionText === "string" ? a.missionText : undefined,
+        });
+        if (typeof a.receiverId === "string" && view) missionOf.set(a.receiverId, view.text);
+      });
 
       const players = members.map((m) => ({
         id: m.player.id, // Firebase Auth uid
         nickname: m.nickname,
         emoji: m.player.animal, // 지금은 이모지. 캐릭터 이미지로 바뀌면 여기만 교체
+        mission: missionOf.get(m.player.id),
       }));
 
       const submissions = subSnap.docs.map((d) => {
         const data = d.data({ serverTimestamps: "estimate" });
         return {
           playerId: data.ownerId as string,
+          photoPath: typeof data.photoPath === "string" ? data.photoPath : undefined,
           submittedAt:
             data.submittedAt instanceof Timestamp
               ? data.submittedAt.toMillis()
@@ -143,6 +160,7 @@ function createMockStore(): ResultData {
       id: `p${i + 1}`,
       nickname: i < NAMES.length ? nickname : `${nickname}${Math.floor(i / NAMES.length) + 1}`,
       emoji,
+      mission: ["하늘 사진 찍기", "가장 웃긴 표정 짓기", "초록색 물건 찾기"][i % 3],
     };
   });
   const submissions = players.map((p, i) => ({

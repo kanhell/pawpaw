@@ -9,8 +9,8 @@ import ScreenShell from "../components/ScreenShell";
 import { ANIMALS } from "../lib/animals";
 import { useAuthState } from "../lib/firebase/auth";
 import { describeError } from "../lib/firebase/errors";
-import { useMembership } from "../lib/firebase/hooks";
-import { joinRoom } from "../lib/firebase/roomRepo";
+import { useMembership, useTakenAnimals } from "../lib/firebase/hooks";
+import { isAnimalTaken, joinRoom } from "../lib/firebase/roomRepo";
 import { isValidInviteCode } from "../lib/invite/code";
 import { manualOpenGuide, planExternalOpen } from "../lib/invite/inAppBrowser";
 import { useBrowserInfo } from "../lib/invite/useBrowserInfo";
@@ -32,9 +32,17 @@ export default function InviteScreen() {
   const auth = useAuthState(userAgent !== "" && !inAppBrowser);
   const uid = auth.status === "signedIn" ? auth.uid : null;
   const membership = useMembership(roomId, uid);
+  const takenList = useTakenAnimals(roomId, uid);
+  const taken = useMemo(
+    () => new Set(takenList.status === "ready" ? takenList.data : []),
+    [takenList],
+  );
 
   const [nickname, setNickname] = useState("");
-  const [animal, setAnimal] = useState(ANIMALS[0]);
+  const [pickedAnimal, setAnimal] = useState(ANIMALS[0]);
+  // 고른 동물을 다른 친구가 먼저 가져가면 남은 동물 중 첫 번째로 바꿔 둔다.
+  const freeAnimals = ANIMALS.filter((item) => !taken.has(item));
+  const animal = taken.has(pickedAnimal) ? (freeAnimals[0] ?? null) : pickedAnimal;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -75,6 +83,10 @@ export default function InviteScreen() {
       setError("닉네임을 입력해 주세요.");
       return;
     }
+    if (!animal) {
+      setError("남은 동물이 없어요. 방이 가득 찼어요.");
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
@@ -82,10 +94,15 @@ export default function InviteScreen() {
       router.replace(ROUTES.room(roomId));
     } catch (e) {
       const errorCode = (e as { code?: string }).code ?? "";
+      const denied = errorCode.includes("permission-denied");
+      // 거부됐다면 같은 동물을 친구가 막 먼저 골랐는지부터 확인한다.
+      const animalTaken = denied && (await isAnimalTaken(roomId, animal).catch(() => false));
       setError(
-        errorCode.includes("permission-denied")
-          ? "참가할 수 없어요. 링크가 만료됐거나 이미 시작된 방일 수 있어요. 방장에게 새 링크를 받아 주세요."
-          : describeError(e),
+        animalTaken
+          ? "방금 다른 친구가 고른 동물이에요. 다른 동물을 골라 주세요."
+          : denied
+            ? "참가할 수 없어요. 이미 시작된 방이거나 폐기된 링크일 수 있어요. 방장에게 새 링크를 받아 주세요."
+            : describeError(e),
       );
       setBusy(false);
     }
@@ -163,9 +180,10 @@ export default function InviteScreen() {
 
       <ProfileFields
         nickname={nickname}
-        animal={animal}
+        animal={animal ?? ""}
         onNicknameChange={setNickname}
         onAnimalChange={setAnimal}
+        takenAnimals={taken}
       />
 
       {error && <p className="text-sm text-primary">{error}</p>}

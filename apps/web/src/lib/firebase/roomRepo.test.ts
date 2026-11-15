@@ -51,6 +51,7 @@ vi.mock("firebase/firestore", () => {
   return {
     Timestamp,
     serverTimestamp: () => "SERVER_TIMESTAMP",
+    increment: (by: number) => ({ kind: "increment", by }),
     collection: (_db: unknown, ...segments: string[]) => ({
       kind: "collection",
       path: segments.join("/"),
@@ -111,6 +112,7 @@ describe("createRoom", () => {
     );
     expect(Object.keys(written).sort()).toEqual([
       "rooms/auto-room-id",
+      "rooms/auto-room-id/animals/🐻",
       "rooms/auto-room-id/members/u1",
       "users/u1",
     ]);
@@ -129,7 +131,18 @@ describe("createRoom", () => {
       phase: null,
       deadlineAt: null,
       resultAt: null,
+      memberCount: 1,
     });
+  });
+
+  it("미리 정한 방 id와 초대 코드를 주면 첫 초대 링크도 같은 batch로 만든다", async () => {
+    const code = "aB3".repeat(8);
+    const roomId = await createRoom("u1", { nickname: "헤리", animal: "🐻" }, { roomId: "r9", inviteCode: code });
+
+    expect(roomId).toBe("r9");
+    const invite = m.batch.set.mock.calls.find(([ref]) => ref.path === `rooms/r9/invites/${code}`);
+    expect(invite?.[1]).toEqual({ code, createdBy: "u1", createdAt: "SERVER_TIMESTAMP" });
+    expect(m.batch.commit).toHaveBeenCalledTimes(1);
   });
 
   it("방장 멤버 문서의 id는 uid와 같고 isHost가 true다", async () => {
@@ -486,22 +499,10 @@ describe("renewInvite", () => {
       "code",
       "createdAt",
       "createdBy",
-      "expiresAt",
     ]);
     expect(data.code).toBe(code);
     expect(data.createdBy).toBe("u1");
     expect(data.createdAt).toBe("SERVER_TIMESTAMP");
-  });
-
-  it("만료 시각은 지금부터 24시간 뒤다 (규칙의 최대 7일 이내)", async () => {
-    const before = Date.now();
-    await renewInvite("room1", "u1");
-    const after = Date.now();
-
-    const expiresAt = m.batch.set.mock.calls[0][1].expiresAt.toDate().getTime();
-    const day = 24 * 60 * 60 * 1000;
-    expect(expiresAt).toBeGreaterThanOrEqual(before + day);
-    expect(expiresAt).toBeLessThanOrEqual(after + day);
   });
 
   it("이전 초대 링크는 폐기하고 한 번에 저장한다", async () => {
@@ -556,7 +557,6 @@ describe("subscribeLatestInvite", () => {
           data: () => ({
             createdBy: "u1",
             createdAt: Timestamp.fromDate(new Date("2026-10-27T01:00:00Z")),
-            expiresAt: Timestamp.fromDate(new Date("2026-10-28T01:00:00Z")),
           }),
         },
       ],
@@ -565,7 +565,6 @@ describe("subscribeLatestInvite", () => {
       code: "A".repeat(24),
       createdBy: "u1",
       createdAt: "2026-10-27T01:00:00.000Z",
-      expiresAt: "2026-10-28T01:00:00.000Z",
     });
 
     onNext({ docs: [] });
@@ -617,6 +616,22 @@ describe("joinRoom", () => {
     const user = m.batch.set.mock.calls.find(([ref]) => ref.path === "users/u2");
     expect(user?.[1]).toMatchObject({ id: "u2", nickname: "친구", animal: "🐰" });
     expect(user?.[2]).toEqual({ merge: true });
+    expect(m.batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("고른 동물을 내 것으로 표시하는 문서를 같은 batch에 만든다 (동물이 겹치지 않게)", async () => {
+    await joinRoom("u2", "room1", code, { nickname: "친구", animal: "🐰" });
+
+    const call = m.batch.set.mock.calls.find(([ref]) => ref.path === "rooms/room1/animals/🐰");
+    expect(call?.[1]).toEqual({ uid: "u2" });
+    expect(m.batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("멤버 수(memberCount)를 같은 batch에서 1 늘린다 (게임 시작 인원 확인용)", async () => {
+    await joinRoom("u2", "room1", code, { nickname: "친구", animal: "🐰" });
+
+    const call = m.batch.update.mock.calls.find(([ref]) => ref.path === "rooms/room1");
+    expect(call?.[1]).toEqual({ memberCount: { kind: "increment", by: 1 } });
     expect(m.batch.commit).toHaveBeenCalledTimes(1);
   });
 

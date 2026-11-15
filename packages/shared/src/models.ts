@@ -34,10 +34,14 @@ export interface User {
   createdAt: Timestamp;
 }
 
+// 결과 공개 방식: 정해진 시각(6·8·10시) / 직접 정한 시각 / 방장이 직접 공개 (resultAt 없음)
+export type ResultMode = "preset" | "custom" | "host";
+
 export interface RoomSettings {
   assigner: MissionAssigner;
   visibility: MissionVisibility;
   scope: MissionScope;
+  resultMode?: ResultMode; // 없으면 아직 고르지 않았다
 }
 
 export interface Room {
@@ -47,9 +51,21 @@ export interface Room {
   status: RoomStatus;
   phase: RoomPhase | null;
   deadlineAt: Timestamp | null; // 미션 수행 마감
-  resultAt: Timestamp | null; // 결과 공개 시각(n시)
+  resultAt: Timestamp | null; // 결과 공개 시각. 방장이 직접 공개하는 방식이면 공개할 때까지 null
   createdAt: Timestamp;
+  // 참가한 멤버 수. 방장 1명으로 시작해 참가할 때마다 1씩 는다. (멤버는 나갈 수 없다)
+  // 규칙은 멤버 수를 직접 셀 수 없어서, 게임 시작 인원(MIN_PLAYERS)을 이 값으로 확인한다.
+  memberCount?: number;
+  // 결과 화면의 '미션 구경'에서 지금 보여주는 친구 순번(0부터). 방장이 넘긴다.
+  // 없으면 아직 시작 전(모두 들어오길 기다리는 중), 사진을 낸 친구 수 이상이면 구경이 끝나고 투표가 시작된다.
+  showcaseIndex?: number;
+  // 결과 화면의 시상식에서 지금 보여주는 상 순번(0부터). 방장이 넘기고 모두 같이 본다.
+  // 없으면 아직 공개 전, 상 개수 이상이면 시상이 끝나고 결과 카드를 본다.
+  awardIndex?: number;
 }
+
+/** 게임을 시작할 수 있는 최소 인원. 2명 이하로는 시작할 수 없다. (firestore.rules에도 같은 값) */
+export const MIN_PLAYERS = 3;
 
 export interface Player {
   id: string;
@@ -60,6 +76,7 @@ export interface Player {
   joinedAt: Timestamp;
   assignmentDone?: boolean; // 직접 부여 단계에서 내가 정해줄 미션을 모두 정했는지. 없으면 false
   submitted?: boolean; // 미션 사진을 제출했는지. 다른 멤버에게도 보인다(사진은 아님). 없으면 false
+  resultEntered?: boolean; // 결과가 열린 뒤 결과 화면에 들어왔는지. 모두 들어와야 미션 구경을 시작한다. 없으면 false
 }
 
 export interface Round {
@@ -127,6 +144,5 @@ export interface Award {
 export interface Invite {
   code: string;
   createdBy: string; // 방장의 User.id
-  createdAt: Timestamp;
-  expiresAt: Timestamp;
+  createdAt: Timestamp; // 만료 시각은 없다. 게임을 시작하면 폐기된다.
 }
