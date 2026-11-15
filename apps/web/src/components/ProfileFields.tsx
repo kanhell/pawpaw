@@ -1,7 +1,7 @@
 "use client";
 
-import { ANIMALS } from "../lib/animals";
-
+import { ANIMAL_LIST } from "../lib/animals";
+import AnimalImage from "./AnimalImage";
 interface ProfileFieldsProps {
   nickname: string;
   animal: string;
@@ -28,20 +28,20 @@ export default function ProfileFields({
         className="w-full rounded-card bg-surface px-4 py-3 text-center shadow-card outline-none"
       />
       <ul className="flex flex-wrap justify-center gap-2">
-        {ANIMALS.map((item) => {
-          const taken = takenAnimals?.has(item) === true;
+        {ANIMAL_LIST.map(({ id, name }) => {
+          const taken = takenAnimals?.has(id) === true;
           return (
-            <li key={item}>
+            <li key={id}>
               <button
-                onClick={() => onAnimalChange(item)}
+                onClick={() => onAnimalChange(id)}
                 disabled={taken}
-                className={`h-14 w-14 rounded-full text-3xl shadow-card disabled:opacity-30 disabled:grayscale ${
-                  item === animal ? "bg-primary" : "bg-surface"
+                className={`grid h-16 w-16 place-items-center rounded-full shadow-card disabled:opacity-30 disabled:grayscale ${
+                  id === animal ? "bg-primary" : "bg-surface"
                 }`}
-                aria-label={taken ? `동물 ${item} (이미 친구가 골랐어요)` : `동물 ${item}`}
-                aria-pressed={item === animal}
+                aria-label={taken ? `${name} (이미 친구가 골랐어요)` : name}
+                aria-pressed={id === animal}
               >
-                {item}
+                <AnimalImage animal={id} className="h-14 w-14" />
               </button>
             </li>
           );
