@@ -5,8 +5,45 @@
  */
 export type BackdropLayout = "center" | "pair";
 
-const WIDTH = 1080;
-const HEIGHT = 1920;
+// 저장하는 사진의 크기. 화면 미리보기도 이 크기의 무대를 줄여서 똑같이 그린다.
+export const STAGE_WIDTH = 1080;
+export const STAGE_HEIGHT = 1920;
+const WIDTH = STAGE_WIDTH;
+const HEIGHT = STAGE_HEIGHT;
+
+export type Size = { width: number; height: number };
+export type Rect = { x: number; y: number; width: number; height: number };
+
+/**
+ * 무대(1080×1920) 위에 카드를 놓을 자리. 저장(캔버스)과 화면 미리보기가 같이 쓴다.
+ * - "center": 첫 카드를 가운데에
+ * - "pair": 두 카드를 나란히. 한 장만 주면 같은 카드를 두 번 놓는다.
+ *   두 장의 높이가 다를 수 있으니(반씩 나눴는데 사람 수가 홀수) 큰 쪽에 맞춰 같은 배율로 줄이고 위를 맞춘다.
+ * 카드 크기는 비율만 쓰므로 화면 크기(px)든 이미지 크기(px)든 같은 결과가 나온다.
+ */
+export function placeCards(layout: BackdropLayout, sizes: Size[]): Rect[] {
+  const maxH = HEIGHT * 0.86;
+  if (layout === "center") {
+    const card = sizes[0];
+    const scale = Math.min((WIDTH * 0.78) / card.width, maxH / card.height);
+    const width = card.width * scale;
+    const height = card.height * scale;
+    return [{ x: (WIDTH - width) / 2, y: (HEIGHT - height) / 2, width, height }];
+  }
+  // 두 장이 가운데로 바짝 붙도록 사이를 좁히고, 양옆 여백을 넉넉히 둔다.
+  const pair = [sizes[0], sizes[1] ?? sizes[0]];
+  const gap = WIDTH * 0.012;
+  const maxW = Math.max(...pair.map((c) => c.width));
+  const tallest = Math.max(...pair.map((c) => c.height));
+  const scale = Math.min((WIDTH * 0.8 - gap) / 2 / maxW, maxH / tallest);
+  const y = (HEIGHT - tallest * scale) / 2;
+  let x = (WIDTH - (pair[0].width * scale + pair[1].width * scale + gap)) / 2;
+  return pair.map((c) => {
+    const rect = { x, y, width: c.width * scale, height: c.height * scale };
+    x += rect.width + gap;
+    return rect;
+  });
+}
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -88,7 +125,6 @@ export async function composeOnBackdrop(
       loadImage(backgroundSrc),
       ...cardUrls.map(loadImage),
     ]);
-    const cardImg = cardImgs[0];
 
     const canvas = document.createElement("canvas");
     canvas.width = WIDTH;
@@ -98,27 +134,11 @@ export async function composeOnBackdrop(
 
     drawBlurredCover(ctx, background);
 
-    const maxH = HEIGHT * 0.86;
-    if (layout === "center") {
-      const scale = Math.min((WIDTH * 0.78) / cardImg.width, maxH / cardImg.height);
-      const w = cardImg.width * scale;
-      const h = cardImg.height * scale;
-      drawCard(ctx, cardImg, (WIDTH - w) / 2, (HEIGHT - h) / 2, w, h);
-    } else {
-      // 두 장이 가운데로 바짝 붙도록 사이를 좁히고, 양옆 여백을 넉넉히 둔다.
-      // 두 장의 높이가 다를 수 있으니(반씩 나눴는데 사람 수가 홀수) 큰 쪽에 맞춰 같은 배율로 줄이고 위를 맞춘다.
-      const pair = [cardImg, cardImgs[1] ?? cardImg];
-      const gap = WIDTH * 0.012;
-      const maxW = Math.max(...pair.map((img) => img.width));
-      const tallest = Math.max(...pair.map((img) => img.height));
-      const scale = Math.min(((WIDTH * 0.8 - gap) / 2) / maxW, maxH / tallest);
-      const top = (HEIGHT - tallest * scale) / 2;
-      let x = (WIDTH - (pair[0].width * scale + pair[1].width * scale + gap)) / 2;
-      for (const img of pair) {
-        drawCard(ctx, img, x, top, img.width * scale, img.height * scale);
-        x += img.width * scale + gap;
-      }
-    }
+    const rects = placeCards(layout, cardImgs);
+    rects.forEach((rect, i) => {
+      const img = cardImgs[i] ?? cardImgs[0];
+      drawCard(ctx, img, rect.x, rect.y, rect.width, rect.height);
+    });
 
     return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
