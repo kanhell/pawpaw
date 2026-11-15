@@ -190,6 +190,29 @@ export function useNow(): number {
   return bucket * 30_000;
 }
 
+// 받은 사진을 기억해 둔다. (경로|버전 → 임시 주소)
+// 같은 사진이 미션 구경·투표·시상식·결과 카드에 계속 나오는데, 화면이 바뀔 때마다 다시 받으면 느리다.
+// 사진은 한 방에 많아야 몇 장이고 장당 수백 KB라서, 임시 주소를 지우지 않고 페이지가 닫힐 때까지 둔다.
+const photoRequests = new Map<string, Promise<string>>();
+const photoUrls = new Map<string, string>(); // 이미 받은 것: 다시 그릴 때 '불러오는 중' 없이 바로 보여준다
+
+/** 사진을 미리 받아 둔다. 이미 받았거나 받는 중이면 그것을 그대로 쓴다. */
+export function preloadPhoto(photoPath: string, version: string): Promise<string> {
+  const key = `${photoPath}|${version}`;
+  let request = photoRequests.get(key);
+  if (!request) {
+    request = loadPhoto(photoPath).then((blob) => {
+      const url = URL.createObjectURL(blob);
+      photoUrls.set(key, url);
+      return url;
+    });
+    // 실패하면 기억에서 지워 다음에 다시 받을 수 있게 한다.
+    request.catch(() => photoRequests.delete(key));
+    photoRequests.set(key, request);
+  }
+  return request;
+}
+
 /**
  * Storage에 있는 사진을 받아 화면에 보여줄 임시 주소로 바꾼다.
  * version이 바뀌면(사진을 교체하면) 다시 받는다.
@@ -206,26 +229,22 @@ export function useStoragePhoto(
   } | null>(null);
 
   useEffect(() => {
-    if (!key || !photoPath) return;
+    if (!key || !photoPath || !version || photoUrls.has(key)) return;
     let cancelled = false;
-    let objectUrl: string | null = null;
-
-    loadPhoto(photoPath)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setState({ key, url: objectUrl, failed: false });
+    preloadPhoto(photoPath, version)
+      .then((url) => {
+        if (!cancelled) setState({ key, url, failed: false });
       })
       .catch(() => {
         if (!cancelled) setState({ key, url: null, failed: true });
       });
-
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [key, photoPath]);
+  }, [key, photoPath, version]);
 
+  const cached = key ? photoUrls.get(key) : undefined;
+  if (cached) return { url: cached, failed: false };
   if (state === null || state.key !== key) return { url: null, failed: false };
   return { url: state.url, failed: state.failed };
 }

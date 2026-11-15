@@ -17,6 +17,7 @@ import { PawIcon, ThumbDownIcon } from "../components/Icons";
 import {
   useBoomDowns,
   useJudgments,
+  preloadPhoto,
   useMembers,
   useRoom,
   useStoragePhoto,
@@ -861,6 +862,13 @@ export default function ResultScreen() {
     if (r.data) setData(r.data);
     setError(r.error);
   };
+
+  // 결과를 받자마자 모든 사진을 한꺼번에 미리 받아 둔다. (미션 구경·투표·시상식에서 기다리지 않게)
+  useEffect(() => {
+    data?.submissions.forEach((sub) => {
+      if (sub.photoPath) preloadPhoto(sub.photoPath, String(sub.submittedAt)).catch(() => {});
+    });
+  }, [data]);
 
   // 방장이 시상식을 시작하면 최신 투표로 다시 불러온다. (대기 화면은 3초마다만 불러오므로)
   const awardStarted = room.status === "ready" && room.data?.awardIndex !== undefined;
