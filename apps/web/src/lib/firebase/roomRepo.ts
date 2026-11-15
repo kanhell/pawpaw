@@ -123,12 +123,9 @@ export async function createRoom(
   const roomId = roomRef.id;
 
   const settings: RoomSettings = {
-    mode: "oneshot",
     assigner: "app",
     visibility: "private",
     scope: "different",
-    durationDays: null,
-    timeLimitSec: null,
   };
 
   // 사용자, 방, 방장 멤버를 한 번에 만든다. (모두 성공하거나 모두 실패)

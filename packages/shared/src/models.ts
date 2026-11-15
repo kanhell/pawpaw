@@ -3,9 +3,6 @@ export type Timestamp = string; // ISO 8601
 export type AnimalCharacter = string; // 목록 확정 시 union으로 교체
 
 // ---------- 열거형 ----------
-export type GameMode = 'daily' | 'oneshot' | 'race' | 'solo' | 'endless';
-// 매일매일 / 일회성 / 선착순 / 1인모드 / 무한미션
-
 export type RoomStatus = 'waiting' | 'playing' | 'finished';
 export type RoomPhase = 'settings' | 'assign' | 'reveal' | 'play' | 'waitResult'; // status가 playing일 때만
 
@@ -38,12 +35,9 @@ export interface User {
 }
 
 export interface RoomSettings {
-  mode: GameMode;
   assigner: MissionAssigner;
   visibility: MissionVisibility;
   scope: MissionScope;
-  durationDays: number | null; // daily: 진행 일수
-  timeLimitSec: number | null; // endless: 제한 시간
 }
 
 export interface Room {

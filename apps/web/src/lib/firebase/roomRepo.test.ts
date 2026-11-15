@@ -360,7 +360,7 @@ describe("subscribeRoom", () => {
       id: "room1",
       data: () => ({
         hostId: "u1",
-        settings: { mode: "oneshot" },
+        settings: { assigner: "app", visibility: "private", scope: "different" },
         status: "waiting",
         deadlineAt: null,
         resultAt: Timestamp.fromDate(new Date("2026-10-28T09:00:00Z")),

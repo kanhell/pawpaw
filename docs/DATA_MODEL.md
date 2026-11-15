@@ -17,7 +17,6 @@ Room 1 ── N Award N ── 1 Player
 
 | 이름 | 값 | 설명 |
 |---|---|---|
-| `GameMode` | `daily` `oneshot` `race` `solo` `endless` | 매일매일 / 일회성 / 선착순 / 1인 / 무한미션 |
 | `RoomStatus` | `waiting` `playing` `finished` | 대기 / 진행 / 종료 |
 | `RoomPhase` | `settings` `assign` `reveal` `play` `waitResult` | `playing` 안의 단계. `settings`는 방장이 게임 설정을 하는 단계 |
 | `MissionAssigner` | `players` `app` | 서로 정해주기 / 앱이 정해주기 |
@@ -41,7 +40,7 @@ Room 1 ── N Award N ── 1 Player
 |---|---|---|
 | id | string | |
 | hostId | string | 방장의 User id (Firebase Auth uid) |
-| settings | RoomSettings | 모드와 미션 부여 방법 |
+| settings | RoomSettings | 미션 부여 방법 |
 | status | RoomStatus | `finished`는 방장이 결과를 먼저 공개하면 바뀐다 (`RESULT_REVEAL.md`) |
 | phase | RoomPhase \| null | `status = playing`일 때만 값이 있음. 게임 시작 직후에는 `settings` |
 | deadlineAt | timestamp \| null | 미션 수행 마감. 방장이 결과를 먼저 공개하면 그 시각으로 채워진다 |
@@ -51,12 +50,9 @@ Room 1 ── N Award N ── 1 Player
 ### RoomSettings
 | 필드 | 타입 | 비고 |
 |---|---|---|
-| mode | GameMode | |
 | assigner | MissionAssigner | |
 | visibility | MissionVisibility | |
 | scope | MissionScope | |
-| durationDays | number \| null | `daily`: 진행 일수 |
-| timeLimitSec | number \| null | `endless`: 제한 시간 |
 
 ### Player
 방 안의 사용자. `User`를 참조한다.
@@ -73,7 +69,7 @@ Room 1 ── N Award N ── 1 Player
 | submitted | boolean (선택) | 미션 사진을 제출했는지. 값이 없으면 false. 같은 방 멤버 모두(방장 포함)에게 보인다. 사진·경로·시각은 담지 않는다. 본인만, 내 제출 문서가 있을 때 `true`로 바꿀 수 있다 (`RESULT_REVEAL.md`) |
 
 ### Round
-하루(또는 한 판) 단위. `daily`는 날마다 하나씩, 나머지 모드는 방당 하나.
+한 판 단위. 지금은 방당 하나.
 
 | 필드 | 타입 | 비고 |
 |---|---|---|
@@ -183,12 +179,9 @@ missions/{id}                        Mission (기본 제공 목록)
 ## 열린 질문
 
 1. 시상 종류(`AwardType`) 목록과 각 상의 선정 기준(정량 집계인지 투표인지).
-2. 선착순 "한 명 살아남기"의 규칙(탈락 조건, 생존 상태 저장 방식).
-3. 매일매일 모드의 보상/벌칙을 데이터로 다룰지.
-4. `Room.status`와 `phase`를 둘로 나누는 현재 방식이 맞는지.
-5. 모드별 설정(`durationDays`, `timeLimitSec`)을 지금처럼 한 구조에 둘지, 모드별 타입으로 나눌지.
-6. 백엔드 저장소(Firestore 등)에 따라 `Player`, `Round`를 Room 하위 컬렉션으로 둘지.
-7. 사용자 인증 방식: 익명/게스트 vs 로그인.
-8. `User.animal`과 `Player.animal`을 둘 다 둘지, `Player.animal`만 둘지.
+2. `Room.status`와 `phase`를 둘로 나누는 현재 방식이 맞는지.
+3. 백엔드 저장소(Firestore 등)에 따라 `Player`, `Round`를 Room 하위 컬렉션으로 둘지.
+4. 사용자 인증 방식: 익명/게스트 vs 로그인.
+5. `User.animal`과 `Player.animal`을 둘 다 둘지, `Player.animal`만 둘지.
 9. 게임 설정 변경을 참가자에게 알리는 방식: 현재는 `rooms/{roomId}` 문서 구독으로 실시간 반영한다. 백엔드가 바뀌면 같은 방식이 가능한지 확인한다.
 10. 직접 정한 미션을 Mission 문서로 정규화할지(재사용·통계). 지금은 `Assignment.missionText`에 담는다. (`MISSION_ASSIGN.md`)
