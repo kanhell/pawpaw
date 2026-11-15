@@ -26,6 +26,9 @@ export type AwardType =
 
 export type AwardBasis = 'metric' | 'vote'; // 정량 결과 / 투표
 
+// 투표로 정하는 시상 항목: 가장 웃긴 미션 / 가장 어려운 미션
+export type VoteCategory = 'funny' | 'hard';
+
 // ---------- 엔티티 ----------
 export interface User {
   id: string;
@@ -104,12 +107,12 @@ export interface Submission {
   submittedAt: Timestamp;
 }
 
+// 문서 ID는 `${voterId}_${category}`로 고정해서 한 항목에 한 번만 투표할 수 있다.
 export interface Vote {
   id: string;
-  roomId: string;
-  voterId: string; // Player.id
-  awardType: AwardType;
-  submissionId: string;
+  voterId: string; // 투표한 Player.id
+  category: VoteCategory;
+  targetId: string; // 고른 Player.id
   createdAt: Timestamp;
 }
 

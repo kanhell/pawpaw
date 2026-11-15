@@ -118,16 +118,15 @@ Room 1 ── N Award N ── 1 Player
 | submittedAt | timestamp | 서버 시각 |
 
 ### Vote
-투표로 수상자를 정하는 시상용.
+투표로 수상자를 정하는 시상용. 문서 ID는 `{voterId}_{category}`로 고정해서 한 항목에 한 번만 투표할 수 있다. (규칙상 수정·삭제 불가)
 
 | 필드 | 타입 | 비고 |
 |---|---|---|
-| id | string | |
-| roomId | string | |
-| voterId | string | Player id |
-| awardType | AwardType | 어떤 상에 대한 투표인지 |
-| submissionId | string | 투표 대상 제출물 |
-| createdAt | timestamp | |
+| id | string | 문서 ID와 같다 |
+| voterId | string | 투표한 Player id |
+| category | VoteCategory | `funny`(가장 웃긴 미션) `hard`(가장 어려운 미션) |
+| targetId | string | 고른 Player id |
+| createdAt | timestamp | 서버 시각 |
 
 ### Invite
 친구 초대 링크용 코드. 링크는 `/invite/{roomId}/{code}`.

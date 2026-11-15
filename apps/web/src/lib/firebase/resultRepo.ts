@@ -6,19 +6,28 @@ import {
   setDoc,
   Timestamp,
 } from "firebase/firestore";
-import { getFirebase } from "../../../../src/lib/firebase/client";
-import {
-  subscribeMembers,
-  type MemberProfile,
-} from "../../../../src/lib/firebase/roomRepo";
-import type { RoomData, VoteCategory } from "./types";
+import type { Vote, VoteCategory } from "@pawpaw/shared";
+import { getFirebase } from "./client";
+import { subscribeMembers, type MemberProfile } from "./roomRepo";
 
+// ---------- 결과 화면용 타입 (저장 모델이 아니라 화면에서 쓰기 좋게 모은 형태) ----------
+export type ResultPlayer = { id: string; nickname: string; emoji: string };
+export type ResultSubmission = { playerId: string; submittedAt: number };
+// { funny: { 투표한사람id: 고른사람id }, hard: { ... } }
+export type ResultVotes = Record<VoteCategory, Record<string, string>>;
+
+export type ResultData = {
+  me: string; // 지금 접속한 사람 id
+  players: ResultPlayer[]; // 인원 수 제한 없음
+  submissions: ResultSubmission[];
+  votes: ResultVotes;
+};
 // 결과 공개 전이거나 방 멤버가 아니라서 규칙이 막은 경우
 export const RESULTS_NOT_OPEN = "RESULTS_NOT_OPEN";
 
 // ---------- 인터페이스 ----------
 export interface ResultRepository {
-  getRoomData(roomId: string, me: string): Promise<RoomData>;
+  getRoomData(roomId: string, me: string): Promise<ResultData>;
   submitVote(
     roomId: string,
     voterId: string,
@@ -85,7 +94,7 @@ const firebaseResultRepository: ResultRepository = {
         };
       });
 
-      const votes: RoomData["votes"] = { funny: {}, hard: {} };
+      const votes: ResultData["votes"] = { funny: {}, hard: {} };
       voteSnap.docs.forEach((d) => {
         const v = d.data();
         if (
@@ -108,11 +117,9 @@ const firebaseResultRepository: ResultRepository = {
     const { db } = getFirebase();
     // 문서 ID를 고정해서 같은 항목에 두 번 투표할 수 없게 한다. (규칙상 수정 불가)
     const voteId = `${voterId}_${category}`;
+    const vote = { id: voteId, voterId, category, targetId } satisfies Omit<Vote, "createdAt">;
     await setDoc(doc(db, "rooms", roomId, "votes", voteId), {
-      id: voteId,
-      voterId,
-      category,
-      targetId,
+      ...vote,
       createdAt: serverTimestamp(),
     });
   },
@@ -129,7 +136,7 @@ const NAMES: [string, string][] = [
 ];
 const BASE = 1_700_000_000_000;
 
-function createMockStore(): RoomData {
+function createMockStore(): ResultData {
   const players = Array.from({ length: MOCK_PLAYER_COUNT }, (_, i) => {
     const [nickname, emoji] = NAMES[i % NAMES.length];
     return {
@@ -144,7 +151,7 @@ function createMockStore(): RoomData {
   }));
   const me = players[0].id;
 
-  const votes: RoomData["votes"] = { funny: {}, hard: {} };
+  const votes: ResultData["votes"] = { funny: {}, hard: {} };
   players.forEach((voter, i) => {
     if (voter.id === me || players.length < 2) return;
     const pick = (offset: number) => {
