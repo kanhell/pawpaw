@@ -3,7 +3,7 @@
 //   DOM 순서상 뒤에 그려진 것이 위로 올라와 덮는다.
 export type Scene = "day" | "sunset";
 
-const SCENE_IMAGE: Record<Scene, string> = {
+export const SCENE_IMAGE: Record<Scene, string> = {
   day: "/backgrounds/day.jpeg",
   sunset: "/backgrounds/sunset.jpeg",
 };

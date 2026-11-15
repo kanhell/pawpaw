@@ -11,6 +11,8 @@ import BottomButton from "../components/BottomButton";
 import BottomSheet from "../components/BottomSheet";
 import ChoiceButtons from "../components/ChoiceButtons";
 import Popup from "../components/Popup";
+import { SCENE_IMAGE } from "../components/SceneBackground";
+import { composeOnBackdrop, type BackdropLayout } from "../lib/resultImage";
 import { PawIcon, ThumbDownIcon } from "../components/Icons";
 import {
   useBoomDowns,
@@ -572,6 +574,158 @@ function RevealStage({
   );
 }
 
+// ---------- 결과 카드 (인생네컷 액자) ----------
+type FrameColor = "black" | "beige";
+type StripItem = {
+  key: string;
+  player: ResultPlayer;
+  submission: ResultSubmission | undefined;
+  badge?: string; // 사진 아래 왼쪽의 짧은 이름표 (웃긴·빠른·어려운)
+};
+
+// 액자(검정 또는 베이지)에 사진 칸을 세로로 쌓는다.
+// 맨 위 가운데에 로고, 사진 오른쪽 아래에 캐릭터, 사진 아래에 이름표·미션과 닉네임, 맨 아래에 날짜.
+// 사진은 자르지 않는다: 폭을 꽉 채우고 높이는 사진 비율대로. 이미지로 저장하면 액자째 찍힌다.
+function ResultStrip({
+  items,
+  frameColor,
+  date,
+  stripRef,
+}: {
+  items: StripItem[];
+  frameColor: FrameColor;
+  date: string;
+  stripRef: (node: HTMLDivElement | null) => void;
+}) {
+  return (
+    <div
+      ref={stripRef}
+      className={`flex min-w-0 flex-1 flex-col gap-6 p-3 pb-4 ${
+        frameColor === "black" ? "bg-ink text-canvas" : "bg-canvas text-ink shadow"
+      }`}
+    >
+      {/* 로고: 액자 맨 위 가운데 */}
+      <p className="flex items-center justify-center gap-1.5 pt-1 text-lg font-bold">
+        <PawIcon className="size-5" />
+        PawPaw
+      </p>
+      {items.map((item) => (
+        <div key={item.key} className="w-full">
+          <div className="relative w-full overflow-hidden">
+            <MissionPhoto player={item.player} submission={item.submission} fit="frame" />
+            {/* 사진 오른쪽 아래에 캐릭터를 시그니처처럼 */}
+            <p className="absolute bottom-2 right-2 text-3xl drop-shadow" aria-hidden="true">
+              {item.player.emoji}
+            </p>
+          </div>
+          {/* 사진 아래: 왼쪽에 이름표와 미션, 오른쪽에 닉네임 */}
+          <div className="flex items-center justify-between gap-2 pt-1.5 text-xs">
+            <span className="flex min-w-0 items-center gap-1.5 text-left">
+              {item.badge && (
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 font-bold ${
+                    frameColor === "black" ? "bg-canvas text-ink" : "bg-ink text-canvas"
+                  }`}
+                >
+                  {item.badge}
+                </span>
+              )}
+              <span className="min-w-0 truncate opacity-80">{item.player.mission ?? ""}</span>
+            </span>
+            <span className="shrink-0 text-right font-bold">{item.player.nickname}</span>
+          </div>
+        </div>
+      ))}
+      <p className="px-1 pt-1 text-right text-sm tracking-widest">{date}</p>
+    </div>
+  );
+}
+
+// 전체 미션을 볼 때 이 인원부터는 한 줄이 너무 길어지니 반씩 나눠 두 줄로 놓는다.
+// (저장할 때도 서로 다른 두 장을 나란히 놓는 방식으로만 저장한다)
+const SPLIT_STRIP_FROM = 5;
+
+// ---------- 이미지 저장 방식 ----------
+// card: 결과 카드만 / center: 흐린 배경 + 카드 가운데 / pair: 흐린 배경 + 카드 두 장 나란히
+type SaveStyle = "card" | BackdropLayout;
+type SaveChoice = SaveStyle | "all"; // all: 세 가지를 한 번에
+
+const SAVE_STYLES: { style: SaveStyle; label: string; detail: string }[] = [
+  { style: "card", label: "카드만", detail: "결과 카드 그대로" },
+  { style: "center", label: "배경 + 카드 한 장", detail: "흐린 놀이터 배경 가운데에" },
+  { style: "pair", label: "배경 + 카드 두 장", detail: "흐린 놀이터 배경에 나란히" },
+];
+
+// 저장 방식 미리보기 그림: 9:16 틀에 배경(흐림)과 카드(세로 막대)를 간단히 그린다.
+function SaveStyleThumb({ style }: { style: SaveStyle }) {
+  const strip = <span className="h-[80%] w-[30%] rounded-[2px] bg-ink shadow" />;
+  if (style === "card") {
+    return (
+      <span className="grid h-16 w-9 shrink-0 place-items-center">
+        <span className="h-full w-[60%] rounded-[2px] bg-ink shadow" />
+      </span>
+    );
+  }
+  return (
+    <span className="relative flex h-16 w-9 shrink-0 items-center justify-center gap-[2px] overflow-hidden rounded-[3px]">
+      <span
+        aria-hidden
+        className="absolute inset-0 scale-110 bg-cover bg-center blur-[2px]"
+        style={{ backgroundImage: `url(${SCENE_IMAGE.sunset})` }}
+      />
+      <span className="relative flex h-full w-full items-center justify-center gap-[2px]">
+        {style === "center" ? <span className="h-[80%] w-[45%] rounded-[2px] bg-ink shadow" /> : (
+          <>
+            {strip}
+            {strip}
+          </>
+        )}
+      </span>
+    </span>
+  );
+}
+
+function SaveStylePopup({
+  busy,
+  onSelect,
+  onClose,
+}: {
+  busy: boolean;
+  onSelect: (choice: SaveChoice) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Popup title="어떻게 저장할까요?" onClose={onClose}>
+      <div className="flex w-full flex-col gap-2">
+        {SAVE_STYLES.map((s, i) => (
+          <button
+            key={s.style}
+            disabled={busy}
+            onClick={() => onSelect(s.style)}
+            className="flex w-full items-center gap-4 rounded-card bg-surface px-4 py-3 text-left shadow-card active:scale-[0.98] disabled:opacity-50"
+          >
+            <SaveStyleThumb style={s.style} />
+            <span className="flex min-w-0 flex-col">
+              <span className="font-bold">
+                {i + 1}. {s.label}
+              </span>
+              <span className="text-sm text-ink-muted">{s.detail}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <button
+        disabled={busy}
+        onClick={() => onSelect("all")}
+        className="w-full rounded-full bg-primary py-3 font-bold text-primary-foreground active:scale-95 disabled:opacity-50"
+      >
+        모두 저장 ({SAVE_STYLES.length}장)
+      </button>
+      {busy && <p className="text-sm text-ink-subtle">이미지를 만드는 중...</p>}
+    </Popup>
+  );
+}
+
 // ---------- 전체 화면 ----------
 type Phase = "voteFunny" | "voteHard" | "waiting" | "reveal" | "share";
 
@@ -590,7 +744,7 @@ type LoadResult =
 
 // 결과 카드를 화면에서만 비율 그대로 줄여 한 화면에 들어오게 한다.
 // (저장하는 이미지는 카드 자체를 찍으므로 원래 크기 그대로다)
-const CARD_SCREEN_RESERVE_PX = 210; // 카드 말고 화면에 함께 있는 것: 위아래 여백, 액자 색 버튼, 저장·다시 보기 버튼
+const CARD_SCREEN_RESERVE_PX = 260; // 카드 말고 화면에 함께 있는 것: 위아래 여백, 수상작/전체 탭, 액자 색 버튼, 저장·다시 보기 버튼
 
 function useFitToScreen(el: HTMLElement | null) {
   const [fit, setFit] = useState<{ height: number; scale: number } | null>(null);
@@ -673,13 +827,20 @@ export default function ResultScreen() {
     enteredRef.current = true;
     markResultEntered(roomId, uid).catch((e) => console.error(e));
   }, [canMark, roomId, uid]);
-  const cardRef = useRef<HTMLDivElement | null>(null);
+  // 카드 묶음(한 줄 또는 두 줄)을 통째로 재서 화면에 맞게 줄인다.
   const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null);
-  const setCardNode = useCallback((node: HTMLDivElement | null) => {
-    cardRef.current = node;
-    setCardEl(node);
-  }, []);
   const cardFit = useFitToScreen(cardEl);
+  // 저장할 때 찍는 카드(액자)들. 두 줄이면 두 개.
+  const stripRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const setStrip0 = useCallback((node: HTMLDivElement | null) => {
+    stripRefs.current[0] = node;
+  }, []);
+  const setStrip1 = useCallback((node: HTMLDivElement | null) => {
+    stripRefs.current[1] = node;
+  }, []);
+  const [cardView, setCardView] = useState<"awards" | "all">("awards"); // 수상작만 / 전체 미션
+  const [saveMenuOpen, setSaveMenuOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // 서버에서 결과를 받아 오기만 한다. (state는 건드리지 않음)
   const fetchResult = useCallback(async (): Promise<LoadResult | null> => {
@@ -798,41 +959,71 @@ export default function ResultScreen() {
     }
   };
 
-  const saveImage = async () => {
-    if (!cardRef.current) return;
-    const node = cardRef.current;
-    let blob: Blob | null;
+  // 카드(액자) 하나를 원래 크기 그대로 이미지로 찍는다.
+  const captureStrip = async (node: HTMLDivElement, pixelRatio: number) => {
+    // 화면과 똑같이 찍히도록, 글꼴과 사진이 다 그려질 때까지 기다린다.
+    await document.fonts.ready;
+    await Promise.all(
+      Array.from(node.querySelectorAll("img")).map((img) => img.decode().catch(() => {})),
+    );
+    // 화면에서는 카드를 줄여 보여주므로(transform), 줄이기 전 원래 크기로 찍는다.
+    const options = {
+      // cacheBust는 쓰지 않는다. 사진 주소(blob:) 뒤에 ?시각을 붙여 버려서 사진을 못 읽고 저장이 실패한다.
+      width: node.offsetWidth,
+      height: node.offsetHeight,
+      pixelRatio,
+      backgroundColor: getComputedStyle(node).backgroundColor, // 액자 색 그대로
+    };
+    // iOS Safari는 첫 번째에 사진·글꼴이 빠진 채 찍히는 일이 잦아서, 한 번 그려 본 뒤 다시 찍는다.
+    await toBlob(node, options).catch(() => null);
+    return toBlob(node, options);
+  };
+
+  // 두 줄(전체 미션을 반씩)이면 저장 방식을 고르지 않고 두 장을 나란히 놓는 방식으로만 저장한다.
+  const saveImage = async (choice: SaveChoice) => {
+    const strips = stripRefs.current.filter((n): n is HTMLDivElement => n !== null);
+    if (strips.length === 0 || saving) return;
+    const split = strips.length > 1;
+    setSaving(true);
+    let blobs: Blob[] | null;
     try {
-      // 화면과 똑같이 찍히도록, 글꼴과 사진이 다 그려질 때까지 기다린다.
-      await document.fonts.ready;
-      await Promise.all(
-        Array.from(node.querySelectorAll("img")).map((img) => img.decode().catch(() => {})),
-      );
-      // 화면에서는 카드를 줄여 보여주므로(transform), 줄이기 전 원래 크기로 찍는다.
-      const options = {
-        // cacheBust는 쓰지 않는다. 사진 주소(blob:) 뒤에 ?시각을 붙여 버려서 사진을 못 읽고 저장이 실패한다.
-        width: node.offsetWidth,
-        height: node.offsetHeight,
-        pixelRatio: Math.max(2, window.devicePixelRatio || 1), // 화면만큼 또렷하게
-        backgroundColor: getComputedStyle(node).backgroundColor, // 액자 색 그대로
-      };
-      // iOS Safari는 첫 번째에 사진·글꼴이 빠진 채 찍히는 일이 잦아서, 한 번 그려 본 뒤 다시 찍는다.
-      await toBlob(node, options).catch(() => null);
-      blob = await toBlob(node, options);
+      // 두 줄은 한 줄 폭이 반이라, 배경에 올렸을 때 흐려 보이지 않게 더 촘촘히 찍는다.
+      const ratio = Math.max(split ? 3 : 2, window.devicePixelRatio || 1);
+      const cards: Blob[] = [];
+      for (const node of strips) {
+        const blob = await captureStrip(node, ratio);
+        if (!blob) throw new Error("capture failed");
+        cards.push(blob);
+      }
+      const styles: SaveStyle[] = split
+        ? ["pair"]
+        : choice === "all"
+          ? SAVE_STYLES.map((s) => s.style)
+          : [choice];
+      blobs = [];
+      for (const style of styles) {
+        // 2·3번: 흐린 놀이터(노을) 배경 위에 카드를 한 장 가운데, 또는 두 장 나란히 올린다.
+        blobs.push(
+          style === "card" ? cards[0] : await composeOnBackdrop(cards, SCENE_IMAGE.sunset, style),
+        );
+      }
     } catch (e) {
       console.error(e);
-      blob = null;
+      blobs = null;
     }
-    if (!blob) {
+    setSaving(false);
+    setSaveMenuOpen(false);
+    if (!blobs) {
       alert("이미지를 만들지 못했어요. 사진이 다 보인 뒤에 다시 시도해 주세요.");
       return;
     }
 
-    const file = new File([blob], "pawpaw-result.png", { type: "image/png" });
+    const names = blobs.map((_, i) => (blobs.length > 1 ? `pawpaw-result-${i + 1}.png` : "pawpaw-result.png"));
+    const files = blobs.map((blob, i) => new File([blob], names[i], { type: "image/png" }));
     // 휴대폰: 공유하기로 사진 앱에 저장할 수 있게 한다. (iOS Safari는 다운로드 링크로 저장이 잘 안 된다)
-    if (navigator.canShare?.({ files: [file] })) {
+    if (navigator.canShare?.({ files })) {
       try {
-        await navigator.share({ files: [file] });
+        await navigator.share({ files });
         return;
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return; // 사용자가 공유 창을 닫음
@@ -840,12 +1031,14 @@ export default function ResultScreen() {
       }
     }
     // 그 밖(컴퓨터 등): 파일로 내려받는다.
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.download = "pawpaw-result.png";
-    link.href = url;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    blobs.forEach((blob, i) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = names[i];
+      link.href = url;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
   };
 
   const shell = "mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center p-6 text-center";
@@ -1020,6 +1213,32 @@ export default function ResultScreen() {
       })()
     : "";
 
+  // 결과 카드에 넣을 사진들: 수상작은 상 순서대로, 전체 미션은 사진을 낸 친구 모두(받은 상이 있으면 이름표로)
+  const findSubmission = (playerId: string) => data.submissions.find((sub) => sub.playerId === playerId);
+  const cardItems: StripItem[] =
+    cardView === "awards"
+      ? revealList.map((r) => ({
+          key: r.title,
+          player: r.winner,
+          submission: findSubmission(r.winner.id),
+          badge: r.short,
+        }))
+      : presenters.map((p) => {
+          const awards = revealList.filter((r) => r.winner.id === p.id).map((r) => r.short);
+          return {
+            key: p.id,
+            player: p,
+            submission: findSubmission(p.id),
+            badge: awards.length > 0 ? awards.join("·") : undefined,
+          };
+        });
+  // 전체 미션이 많으면 앞쪽 반과 뒤쪽 반으로 나눠 두 줄로 놓는다.
+  const half = Math.ceil(cardItems.length / 2);
+  const strips =
+    cardView === "all" && cardItems.length >= SPLIT_STRIP_FROM
+      ? [cardItems.slice(0, half), cardItems.slice(half)]
+      : [cardItems];
+
   const allVoted = isAllVoted(data);
   const votedCount = data.players.filter((p) => data.votes.funny[p.id] && data.votes.hard[p.id]).length;
 
@@ -1127,6 +1346,27 @@ export default function ResultScreen() {
             animate={{ opacity: 1, scale: 1 }}
             className="flex w-full flex-col items-center gap-4"
           >
+            {/* 보기 고르기: 상 받은 미션만 / 모든 친구의 미션 */}
+            <div role="tablist" aria-label="결과 카드 보기" className="flex rounded-full bg-surface/70 p-1 shadow-card">
+              {(
+                [
+                  ["awards", "수상작"],
+                  ["all", "전체 미션"],
+                ] as const
+              ).map(([view, label]) => (
+                <button
+                  key={view}
+                  role="tab"
+                  aria-selected={cardView === view}
+                  onClick={() => setCardView(view)}
+                  className={`rounded-full px-4 py-1.5 text-sm font-bold active:scale-95 ${
+                    cardView === view ? "bg-ink text-canvas" : "text-ink-muted"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {/* 액자 색 고르기: 검정 / 베이지(앱 바탕색) */}
             <div role="radiogroup" aria-label="액자 색" className="flex items-center gap-3">
               {(["black", "beige"] as const).map((color) => (
@@ -1142,9 +1382,7 @@ export default function ResultScreen() {
                 />
               ))}
             </div>
-            {/* 결과 카드: 인생네컷처럼 액자(검정 또는 베이지)에 사진 칸을 세로로 쌓는다.
-                맨 위 가운데에 로고, 사진 오른쪽 아래에 캐릭터, 사진 아래에 상 이름·미션과 닉네임, 맨 아래에 날짜.
-                사진은 자르지 않는다: 폭을 꽉 채우고 높이는 사진 비율대로. 이미지로 저장하면 액자째 찍힌다. */}
+            {/* 결과 카드: 인생네컷 액자. 전체 미션이 많으면 반씩 나눠 두 줄로 나란히 놓는다. */}
             {/* 화면에서만 줄인다: 바깥 칸은 줄어든 높이만큼 자리를 잡고, 안쪽 카드는 위 가운데를 기준으로 축소 */}
             <div
               className="w-full"
@@ -1157,55 +1395,25 @@ export default function ResultScreen() {
                     : undefined
                 }
               >
-                <div
-                  ref={setCardNode}
-                  className={`flex w-full flex-col gap-6 p-3 pb-4 ${
-                    frameColor === "black" ? "bg-ink text-canvas" : "bg-canvas text-ink shadow"
-                  }`}
-                >
-                  {/* 로고: 액자 맨 위 가운데 */}
-                  <p className="flex items-center justify-center gap-1.5 pt-1 text-lg font-bold">
-                    <PawIcon className="size-5" />
-                    PawPaw
-                  </p>
-                  {revealList.map((r) => (
-                    <div key={r.title} className="w-full">
-                      <div className="relative w-full overflow-hidden">
-                        <MissionPhoto
-                          player={r.winner}
-                          submission={data.submissions.find((sub) => sub.playerId === r.winner.id)}
-                          fit="frame"
-                        />
-                        {/* 사진 오른쪽 아래에 캐릭터를 시그니처처럼 */}
-                        <p className="absolute bottom-2 right-2 text-3xl drop-shadow" aria-hidden="true">
-                          {r.winner.emoji}
-                        </p>
-                      </div>
-                      {/* 사진 아래: 왼쪽에 상 이름(웃긴·빠른·어려운)과 미션, 오른쪽에 닉네임 */}
-                      <div className="flex items-center justify-between gap-2 pt-1.5 text-xs">
-                        <span className="flex min-w-0 items-center gap-1.5 text-left">
-                          <span
-                            className={`shrink-0 rounded-full px-2 py-0.5 font-bold ${
-                              frameColor === "black" ? "bg-canvas text-ink" : "bg-ink text-canvas"
-                            }`}
-                          >
-                            {r.short}
-                          </span>
-                          <span className="min-w-0 truncate opacity-80">{r.winner.mission ?? ""}</span>
-                        </span>
-                        <span className="shrink-0 text-right font-bold">{r.winner.nickname}</span>
-                      </div>
-                    </div>
+                <div ref={setCardEl} className="flex w-full items-start gap-1">
+                  {strips.map((items, i) => (
+                    <ResultStrip
+                      key={`${cardView}-${i}`}
+                      items={items}
+                      frameColor={frameColor}
+                      date={resultDate}
+                      stripRef={i === 0 ? setStrip0 : setStrip1}
+                    />
                   ))}
-                  <p className="px-1 pt-1 text-right text-sm tracking-widest">{resultDate}</p>
                 </div>
               </div>
             </div>
             <button
-              onClick={saveImage}
-              className="rounded-full bg-red-500 px-8 py-3 font-bold text-white active:scale-95"
+              disabled={saving}
+              onClick={() => (strips.length > 1 ? void saveImage("pair") : setSaveMenuOpen(true))}
+              className="rounded-full bg-red-500 px-8 py-3 font-bold text-white active:scale-95 disabled:bg-gray-300"
             >
-              이미지 저장
+              {saving ? "이미지 만드는 중..." : "이미지 저장"}
             </button>
             <button onClick={replay} className="text-sm text-gray-500 underline">
               발표 다시 보기
@@ -1213,6 +1421,13 @@ export default function ResultScreen() {
           </motion.section>
         )}
       </AnimatePresence>
+      {saveMenuOpen && (
+        <SaveStylePopup
+          busy={saving}
+          onSelect={(style) => void saveImage(style)}
+          onClose={() => !saving && setSaveMenuOpen(false)}
+        />
+      )}
       {confirmReveal && (
         <Popup title="그래도 공개할까요?" onClose={() => setConfirmReveal(false)}>
           <p className="text-sm text-ink-muted">
