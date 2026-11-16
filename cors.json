@@ -1,6 +1,10 @@
 [
   {
-    "origin": ["http://localhost:3000"],
+    "origin": [
+      "http://localhost:3000",
+      "https://pawpaw-web.vercel.app",
+      "https://pawpaw-web-git-beta-paw-paw1.vercel.app"
+    ],
     "method": ["GET"],
     "maxAgeSeconds": 3600,
     "responseHeader": ["Authorization", "Content-Type"]
