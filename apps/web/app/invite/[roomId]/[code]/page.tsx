@@ -5,6 +5,15 @@ import InviteScreen from "../../../../src/screens/InviteScreen";
 export const metadata: Metadata = {
   title: "포포에 초대받았어요",
   description: "친구가 포포 방에 초대했어요. 링크를 열어 참가해 보세요.",
+  // 카카오톡 등은 og:title / og:description / og:image를 미리보기로 쓴다.
+  // 그림은 사이트 공용 썸네일(app/opengraph-image.tsx)을 쓴다. 주소에 초대 코드가 들어가지 않게 한다.
+  openGraph: {
+    title: "포포에 초대받았어요",
+    description: "친구가 포포 방에 초대했어요. 링크를 열어 참가해 보세요.",
+    siteName: "PawPaw",
+    type: "website",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "PawPaw" }],
+  },
   referrer: "no-referrer", // 링크의 초대 코드가 다른 사이트로 새지 않게 한다
   robots: { index: false, follow: false },
 };
