@@ -84,6 +84,7 @@ function toPlayer(uid: string, roomId: string, d: DocumentData): Player {
     ...(d.assignmentDone === true ? { assignmentDone: true } : {}),
     ...(d.submitted === true ? { submitted: true } : {}),
     ...(d.resultEntered === true ? { resultEntered: true } : {}),
+    ...(typeof d.showcaseNext === "number" ? { showcaseNext: d.showcaseNext } : {}),
   };
 }
 
@@ -519,6 +520,21 @@ export async function renewInvite(roomId: string, uid: string): Promise<string> 
   return code;
 }
 
+// 초대 링크가 아직 살아 있는지 구독한다. 게임을 시작하거나 방장이 새 링크를 만들면 문서가 지워져 false가 된다.
+export function subscribeInviteAlive(
+  roomId: string,
+  code: string,
+  onData: OnData<boolean>,
+  onError: OnError,
+): Unsubscribe {
+  const { db } = getFirebase();
+  return onSnapshot(
+    doc(db, "rooms", roomId, "invites", code),
+    (snap) => onData(snap.exists()),
+    onError,
+  );
+}
+
 // 방장만 호출한다. 모든 초대 링크를 폐기한다.
 export async function revokeInvites(roomId: string): Promise<void> {
   const { db } = getFirebase();
@@ -653,6 +669,12 @@ export async function revealResultsNow(roomId: string): Promise<void> {
 export async function setShowcaseIndex(roomId: string, index: number): Promise<void> {
   const { db } = getFirebase();
   await updateDoc(doc(db, "rooms", roomId), { showcaseIndex: index });
+}
+
+// 미션 구경에서 지금 보고 있는 친구(index)는 넘겨도 된다고 표시한다. 방장이 아닌 멤버가 누른다.
+export async function markShowcaseNext(roomId: string, uid: string, index: number): Promise<void> {
+  const { db } = getFirebase();
+  await updateDoc(doc(db, "rooms", roomId, "members", uid), { showcaseNext: index });
 }
 
 // 방장만 호출한다. 결과 화면의 시상식을 시작(0)하거나 다음 상으로 넘긴다. 모두의 화면이 이 값을 따라간다.

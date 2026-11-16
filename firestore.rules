@@ -120,13 +120,22 @@ service cloud.firestore {
         //   다른 멤버에게 "제출했는지"만 알려 주는 용도이며, 사진 경로나 시각은 담지 않는다.
         //   (docs/RESULT_REVEAL.md)
         // - resultEntered: '결과 화면에 들어왔어요' 표시. true로만, 결과가 열린 뒤에만.
+        // - showcaseNext: 미션 구경에서 '다음으로 넘기자' 표시. 결과가 열린 뒤에만, 지금 구경 순번으로만.
         function validMemberUpdate() {
           let data = request.resource.data;
           let changed = data.diff(resource.data).affectedKeys();
-          return changed.hasOnly(['assignmentDone', 'submitted', 'resultEntered'])
+          return changed.hasOnly(['assignmentDone', 'submitted', 'resultEntered', 'showcaseNext'])
             && (
               !changed.hasAny(['resultEntered'])
               || (data.resultEntered == true && resultsOpen(roomId))
+            )
+            && (
+              !changed.hasAny(['showcaseNext'])
+              || (
+                data.showcaseNext is int
+                && resultsOpen(roomId)
+                && data.showcaseNext == roomData(roomId).get('showcaseIndex', -1)
+              )
             )
             && (
               !changed.hasAny(['assignmentDone'])
@@ -177,7 +186,10 @@ service cloud.firestore {
       // 초대 코드. 방장만 만들고 조회하고 폐기할 수 있다. (참가자는 읽을 수 없다)
       // 만료 시각은 없다. 게임을 시작하면 앱이 폐기하고, validJoin도 대기 중인 방만 받는다.
       match /invites/{code} {
-        allow read: if isHost(roomId);
+        // 링크(24자 코드)를 가진 사람은 그 코드 하나가 아직 살아 있는지 확인할 수 있다. (초대 화면의 '만료된 링크' 안내)
+        // 코드를 모르면 찾을 수 없도록 목록 조회는 방장만 할 수 있다.
+        allow get: if signedIn();
+        allow list: if isHost(roomId);
         // 방을 만들 때 같은 batch에서 첫 초대 링크도 만들 수 있게 getAfter로 방장을 확인한다.
         // (방장은 바꿀 수 없으므로 기존 방에서는 isHost와 같다)
         allow create: if signedIn()

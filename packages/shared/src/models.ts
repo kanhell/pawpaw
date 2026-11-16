@@ -77,6 +77,9 @@ export interface Player {
   assignmentDone?: boolean; // 직접 부여 단계에서 내가 정해줄 미션을 모두 정했는지. 없으면 false
   submitted?: boolean; // 미션 사진을 제출했는지. 다른 멤버에게도 보인다(사진은 아님). 없으면 false
   resultEntered?: boolean; // 결과가 열린 뒤 결과 화면에 들어왔는지. 모두 들어와야 미션 구경을 시작한다. 없으면 false
+  // 미션 구경에서 '다음으로 넘기자'고 한 구경 순번(Room.showcaseIndex). 지금 순번과 같을 때만 센다.
+  // 방장을 뺀 멤버의 과반이 넘기자고 해야 방장이 다음 친구로 넘길 수 있다.
+  showcaseNext?: number;
 }
 
 export interface Round {

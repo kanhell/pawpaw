@@ -36,6 +36,7 @@ import {
   boomDown,
   judgeMission,
   markResultEntered,
+  markShowcaseNext,
   setAwardIndex,
   setShowcaseIndex,
 } from "../lib/firebase/roomRepo";
@@ -86,9 +87,9 @@ function getVoteWinner(
   return player ? { player, count: top[1] } : null;
 }
 
-// 두 투표를 모두 끝냈는지
-function hasVoted(data: ResultData, playerId: string) {
-  return Boolean(data.votes.funny[playerId] && data.votes.hard[playerId]);
+// 투표를 모두 끝냈는지. hardVote가 false면(모두 같은 미션) '어려운 미션' 투표는 없다.
+function hasVoted(data: ResultData, playerId: string, hardVote: boolean) {
+  return Boolean(data.votes.funny[playerId] && (!hardVote || data.votes.hard[playerId]));
 }
 
 // 투표할 수 있는 사람: 나를 빼고 고를 후보(사진을 냈고 미션에 실패하지 않은 친구)가 한 명이라도 있는 사람.
@@ -242,6 +243,10 @@ function ShowcaseStage({
   onBoom,
   judgment,
   counts,
+  nextVotes,
+  nextNeeded,
+  wantNext,
+  onWantNext,
 }: {
   index: number;
   total: number;
@@ -250,6 +255,10 @@ function ShowcaseStage({
   isHost: boolean;
   busy: boolean;
   onNext: () => void;
+  nextVotes: number; // 방장을 뺀 멤버 중 지금 친구를 넘기자고 한 수
+  nextNeeded: number; // 방장이 넘길 수 있으려면 필요한 수 (방장을 뺀 멤버의 과반)
+  wantNext: boolean; // 내가 이미 넘기자고 했는지
+  onWantNext: () => void;
   boomCount: number;
   boomState: "mine" | "done" | "ready"; // mine: 내 미션이라 못 누름, done: 이미 누름
   onBoom: () => void;
@@ -359,15 +368,32 @@ function ShowcaseStage({
             인정 투표 중이에요 ({counts.accepts + counts.rejects} / {counts.voterCount}명)
           </p>
         )}
-        {!isHost && <p className="text-sm text-gray-500">방장이 다음 친구로 넘겨요.</p>}
+        {/* 방장을 뺀 친구들의 과반이 넘기자고 해야 방장이 넘길 수 있다. */}
+        <p className="text-sm text-gray-500">
+          {isHost
+            ? `넘기자는 친구 ${nextVotes} / ${nextNeeded}명`
+            : wantNext
+              ? `넘기자고 했어요. 방장이 다음 친구로 넘겨요. (${nextVotes} / ${nextNeeded}명)`
+              : "다 봤으면 넘기자고 알려 주세요."}
+        </p>
       </div>
-      {isHost && (
+      {isHost ? (
         <BottomButton
           onClick={onNext}
           disabled={busy}
-          blockedReason={judgment === "voting" ? "인정 투표가 아직 끝나지 않았어요." : null}
+          blockedReason={
+            judgment === "voting"
+              ? "인정 투표가 아직 끝나지 않았어요."
+              : nextVotes < nextNeeded
+                ? `친구들 과반이 넘기자고 해야 넘길 수 있어요. (${nextVotes} / ${nextNeeded}명)`
+                : null
+          }
         >
           {isLast ? "투표 시작하기" : "다음 친구"}
+        </BottomButton>
+      ) : (
+        <BottomButton onClick={onWantNext} disabled={wantNext}>
+          {wantNext ? "넘기자고 했어요" : isLast ? "투표하러 가자" : "다음으로 넘기자"}
         </BottomButton>
       )}
     </motion.section>
@@ -1054,6 +1080,8 @@ export default function ResultScreen() {
   );
   // 미션 구경이 끝났는지 (방 정보를 못 읽으면 구경 없이 바로 투표한다)
   const roomNow = room.status === "ready" ? room.data : null;
+  // 모두 같은 미션을 한 방은 난이도를 비교할 수 없으므로 '가장 어려운 미션' 투표를 하지 않는다.
+  const hardVote = roomNow?.settings.scope !== "same";
   const showcaseDone =
     roomNow === null ||
     (data !== null &&
@@ -1064,6 +1092,7 @@ export default function ResultScreen() {
   // 투표를 건너뛴 사람은 대기 화면을 본다.
   const waitingForVotes =
     phase === "waiting" ||
+    (phase === "voteHard" && !hardVote) ||
     (phase.startsWith("vote") && showcaseDone && (noCandidates || awardStarted));
 
   // 대기 화면에서는 3초마다 다시 불러와서 "전원 투표 완료"를 확인
@@ -1088,7 +1117,7 @@ export default function ResultScreen() {
     const awarded = new Set(fastest ? [fastest.id] : []);
     const funny = getVoteWinner(data, "funny", awarded);
     if (funny) awarded.add(funny.player.id);
-    const hard = getVoteWinner(data, "hard", awarded);
+    const hard = hardVote ? getVoteWinner(data, "hard", awarded) : null;
     // 발표 순서: 웃긴 → 빠른 → 어려운
     return [
       // short: 결과 카드에서 미션 앞에 붙이는 짧은 이름
@@ -1098,7 +1127,7 @@ export default function ResultScreen() {
     ].filter(
       (x): x is { title: string; short: string; winner: ResultPlayer; detail: string } => Boolean(x),
     );
-  }, [data, failedIds]);
+  }, [data, failedIds, hardVote]);
 
   const vote = async (category: VoteCategory, targetId: string, nextPhase: Phase) => {
     if (!data) return;
@@ -1178,18 +1207,8 @@ export default function ResultScreen() {
       return;
     }
 
-    const file = new File([blob], "pawpaw-result.png", { type: "image/png" });
-    // 휴대폰: 공유하기로 사진 앱에 저장할 수 있게 한다. (iOS Safari는 다운로드 링크로 저장이 잘 안 된다)
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file] });
-        return;
-      } catch (e) {
-        if (e instanceof DOMException && e.name === "AbortError") return; // 사용자가 공유 창을 닫음
-        console.error(e);
-      }
-    }
-    // 그 밖(컴퓨터 등): 파일로 내려받는다.
+    // 공유 창 없이 바로 파일로 내려받는다. (휴대폰도 같다)
+    // 아이폰 Safari는 '사진' 앱이 아니라 '파일' 앱의 다운로드 폴더에 저장된다.
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.download = "pawpaw-result.png";
@@ -1281,6 +1300,20 @@ export default function ResultScreen() {
     const presenter = presenters[showcaseIndex];
     const isHost = roomInfo.hostId === data.me;
     const next = () => changeShowcase(showcaseIndex + 1);
+    // '다음으로 넘기자': 방장을 뺀 멤버 중 지금 순번에 표시한 사람 수. 과반(절반 초과)이면 방장이 넘길 수 있다.
+    const others = (members.status === "ready" ? members.data : []).filter(
+      (m) => m.player.id !== roomInfo.hostId,
+    );
+    const nextVotes = others.filter((m) => m.player.showcaseNext === showcaseIndex).length;
+    const nextNeeded = others.length === 0 ? 0 : Math.floor(others.length / 2) + 1;
+    const wantNext =
+      others.find((m) => m.player.id === data.me)?.player.showcaseNext === showcaseIndex;
+    const onWantNext = () => {
+      markShowcaseNext(roomId, data.me, showcaseIndex).catch((e) => {
+        console.error(e);
+        alert("넘기자고 알리지 못했어요. 다시 시도해 주세요.");
+      });
+    };
     const booms = boomDowns.status === "ready" ? boomDowns.data : [];
     const boomCount = booms.filter((b) => b.targetId === presenter.id).length;
     const boomState =
@@ -1329,6 +1362,10 @@ export default function ResultScreen() {
             onBoom={onBoom}
             judgment={verdict.state}
             counts={verdict.counts}
+            nextVotes={nextVotes}
+            nextNeeded={nextNeeded}
+            wantNext={wantNext}
+            onWantNext={onWantNext}
           />
         </AnimatePresence>
         <AnimatePresence>
@@ -1398,7 +1435,7 @@ export default function ResultScreen() {
   const shownLayout: SaveStyle = split ? "pair" : layout; // 두 줄이면 두 장 나란히로 고정
 
   const voters = getVoters(data, eligibleIds);
-  const votedCount = voters.filter((p) => hasVoted(data, p.id)).length;
+  const votedCount = voters.filter((p) => hasVoted(data, p.id, hardVote)).length;
   const allVoted = votedCount === voters.length;
 
   // 시상식은 다 같이 본다: 투표를 마친 뒤에는 방의 awardIndex를 따라간다. 방장만 넘긴다.
@@ -1440,10 +1477,10 @@ export default function ResultScreen() {
           <VoteScreen
             key="voteFunny"
             category="funny"
-            stepLabel="투표 1 / 2"
+            stepLabel={hardVote ? "투표 1 / 2" : "투표"}
             candidates={candidates}
             submissions={data.submissions}
-            onVote={(id) => vote("funny", id, "voteHard")}
+            onVote={(id) => vote("funny", id, hardVote ? "voteHard" : "waiting")}
           />
         )}
 

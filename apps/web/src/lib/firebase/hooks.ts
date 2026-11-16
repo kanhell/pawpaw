@@ -8,6 +8,7 @@ import {
   checkMembership,
   loadPhoto,
   subscribeLatestInvite,
+  subscribeInviteAlive,
   subscribeMembers,
   subscribeMissionStart,
   subscribeMyAssignment,
@@ -71,6 +72,17 @@ function useSubscription<T>(
 export function useRoom(roomId: string, uid: string | null): Loadable<Room | null> {
   return useSubscription(uid ? `room:${roomId}:${uid}` : null, (onData, onError) =>
     subscribeRoom(roomId, onData, onError),
+  );
+}
+
+/** 초대 링크(코드)가 아직 살아 있는지. 게임이 시작되면 false가 된다. */
+export function useInviteAlive(
+  roomId: string,
+  code: string,
+  uid: string | null,
+): Loadable<boolean> {
+  return useSubscription(uid ? `inviteAlive:${roomId}:${code}:${uid}` : null, (onData, onError) =>
+    subscribeInviteAlive(roomId, code, onData, onError),
   );
 }
 

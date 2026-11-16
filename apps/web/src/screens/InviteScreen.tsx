@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ROUTES } from "@pawpaw/shared";
 import ErrorView from "../components/ErrorView";
@@ -9,7 +10,7 @@ import ScreenShell from "../components/ScreenShell";
 import { ANIMALS } from "../lib/animals";
 import { useAuthState, waitForSignIn } from "../lib/firebase/auth";
 import { describeError } from "../lib/firebase/errors";
-import { useMembership, useTakenAnimals } from "../lib/firebase/hooks";
+import { useInviteAlive, useMembership, useTakenAnimals } from "../lib/firebase/hooks";
 import { checkMembership, isAnimalTaken, joinRoom } from "../lib/firebase/roomRepo";
 import { isValidInviteCode } from "../lib/invite/code";
 import { manualOpenGuide, planExternalOpen } from "../lib/invite/inAppBrowser";
@@ -32,6 +33,7 @@ export default function InviteScreen() {
   const auth = useAuthState(userAgent !== "" && !inAppBrowser);
   const uid = auth.status === "signedIn" ? auth.uid : null;
   const membership = useMembership(roomId, uid);
+  const inviteAlive = useInviteAlive(roomId, code, uid);
   const takenList = useTakenAnimals(roomId, uid);
   const taken = useMemo(
     () => new Set(takenList.status === "ready" ? takenList.data : []),
@@ -168,6 +170,22 @@ export default function InviteScreen() {
     return (
       <ScreenShell>
         <p className="text-ink-muted">방으로 이동하는 중…</p>
+      </ScreenShell>
+    );
+  }
+  // 이미 멤버가 아닌데 링크가 폐기됐으면(게임 시작, 새 링크 발급) 만료 안내를 보여준다.
+  // 확인하지 못했으면(규칙 오류 등) 폼을 그대로 보여주고, 참가할 때 규칙이 막는다.
+  if (membership.status === "ready" && inviteAlive.status === "ready" && !inviteAlive.data) {
+    return (
+      <ScreenShell>
+        <div className="text-6xl">⌛</div>
+        <h1 className="text-2xl font-bold">초대 링크가 만료되었어요</h1>
+        <p className="text-sm text-ink-muted">
+          이미 게임이 시작됐거나 방장이 새 링크를 만들었어요.
+        </p>
+        <Link href={ROUTES.home} className="font-bold text-primary underline">
+          메인으로 이동하기
+        </Link>
       </ScreenShell>
     );
   }
