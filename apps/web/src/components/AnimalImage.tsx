@@ -11,9 +11,7 @@ export default function AnimalImage({
 }) {
   const info = getAnimal(animal);
   if (!info) return <span className="text-2xl">{animal}</span>;
-  const scale = variant === "icon" ? info.iconScale : 1;
-  const posY = variant === "icon" ? info.iconY : 50;
-  // eslint-disable-next-line @next/next/no-img-element
+  // icon은 얼굴만 잘라 둔 그림이라 그대로 채우면 된다.
   return (
     <span className={`block overflow-hidden rounded-full ${className}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -22,10 +20,6 @@ export default function AnimalImage({
         alt={info.name}
         draggable={false}
         className="h-full w-full object-cover [image-rendering:pixelated]"
-        style={{
-          transform: `scale(${scale})`,
-          transformOrigin: `${variant === "icon" ? info.iconX : 50}% ${posY}%`,
-        }}
       />
     </span>
   );
