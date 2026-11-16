@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import SceneBackground from "../src/components/SceneBackground";
 
@@ -27,6 +29,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <SceneBackground scene="day" />
         {children}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
