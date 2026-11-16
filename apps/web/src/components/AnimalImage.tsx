@@ -24,7 +24,7 @@ export default function AnimalImage({
         className="h-full w-full object-cover [image-rendering:pixelated]"
         style={{
           transform: `scale(${scale})`,
-          transformOrigin: `50% ${posY}%`,
+          transformOrigin: `${variant === "icon" ? info.iconX : 50}% ${posY}%`,
         }}
       />
     </span>

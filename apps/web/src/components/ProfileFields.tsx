@@ -27,21 +27,23 @@ export default function ProfileFields({
         placeholder="닉네임"
         className="w-full rounded-card bg-surface px-4 py-3 text-center shadow-card outline-none"
       />
-      <ul className="flex flex-wrap justify-center gap-2">
-        {ANIMAL_LIST.map(({ id, name }) => {
+      <ul className="grid w-full grid-cols-4 justify-items-center gap-3 px-2">
+        {ANIMAL_LIST.map(({ id, name }, index) => {
           const taken = takenAnimals?.has(id) === true;
+          // 마지막 줄 2개(9, 10번째)를 가운데로: 2번째·3번째 칸에 놓는다.
+          const lastRowStart = index === ANIMAL_LIST.length - 2 ? "col-start-2" : "";
           return (
-            <li key={id}>
+            <li key={id} className={lastRowStart}>
               <button
                 onClick={() => onAnimalChange(id)}
                 disabled={taken}
-                className={`grid h-16 w-16 place-items-center rounded-full shadow-card disabled:opacity-30 disabled:grayscale ${
-                  id === animal ? "bg-primary" : "bg-surface"
+                className={`grid size-[72px] place-items-center overflow-hidden rounded-full shadow-card disabled:opacity-30 disabled:grayscale ${
+                  id === animal ? "bg-primary ring-4 ring-primary" : "bg-surface"
                 }`}
                 aria-label={taken ? `${name} (이미 친구가 골랐어요)` : name}
                 aria-pressed={id === animal}
               >
-                <AnimalImage animal={id} className="h-14 w-14" />
+                <AnimalImage animal={id} className="size-full" />
               </button>
             </li>
           );
