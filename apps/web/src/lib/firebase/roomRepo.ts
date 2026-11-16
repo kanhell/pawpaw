@@ -210,6 +210,20 @@ export function subscribeRoom(
   );
 }
 
+// 미션 수행이 시작된 시각(ISO). 방장이 미션을 공개할 때 라운드의 startsAt에 기록된다. 아직 없으면 null.
+export function subscribeMissionStart(
+  roomId: string,
+  onData: OnData<string | null>,
+  onError: OnError,
+): Unsubscribe {
+  const { db } = getFirebase();
+  return onSnapshot(
+    doc(db, "rooms", roomId, "rounds", FIRST_ROUND_ID),
+    (snap) => onData(snap.exists() ? iso(snap.data(READ_OPTIONS).startsAt) : null),
+    onError,
+  );
+}
+
 export function subscribeMembers(
   roomId: string,
   onData: OnData<MemberProfile[]>,

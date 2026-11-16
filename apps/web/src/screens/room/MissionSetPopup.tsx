@@ -138,6 +138,10 @@ export default function MissionSetPopup({
               className="max-w-full rounded-full bg-surface py-1 pl-1 pr-4 shadow-card"
             />
           )}
+          {/* 직접 정해주는 미션도 사진으로 인증하므로, 찍을 수 있는 미션을 정하도록 안내한다. */}
+          <p className="text-sm text-ink-muted">
+            미션은 사진으로 인증해요. 사진으로 보여줄 수 있는 미션을 정해주세요.
+          </p>
           <input
             value={text}
             onChange={(event) => setText(event.target.value)}

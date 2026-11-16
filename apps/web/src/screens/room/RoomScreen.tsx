@@ -10,18 +10,25 @@ import {
 } from "react";
 import Playground from "../../components/Playground";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { MIN_PLAYERS, ROUTES, type Room } from "@pawpaw/shared";
 import BottomButton from "../../components/BottomButton";
 import ChoiceButtons from "../../components/ChoiceButtons";
 import ErrorView from "../../components/ErrorView";
 import { InviteIcon, MembersIcon, MissionIcon, RevealIcon } from "../../components/Icons";
 import Popup from "../../components/Popup";
+import SceneBackground from "../../components/SceneBackground";
 import ScreenShell from "../../components/ScreenShell";
 import { ToastStack, useToasts } from "../../components/Toast";
 import { useAuthState } from "../../lib/firebase/auth";
 import { describeError } from "../../lib/firebase/errors";
-import { useMembers, useMyAssignment, useNow, useRoom } from "../../lib/firebase/hooks";
+import {
+  useMembers,
+  useMissionStart,
+  useMyAssignment,
+  useNow,
+  useRoom,
+} from "../../lib/firebase/hooks";
 import {
   assignRandomMissions,
   startSettingsPhase,
@@ -179,6 +186,7 @@ export default function RoomScreen() {
   const members = useMembers(roomId, uid);
   const assignment = useMyAssignment(roomId, uid);
   const now = useNow();
+  const router = useRouter();
 
   const [popup, setPopup] = useState<UserPopup | null>(null);
   const [busy, setBusy] = useState(false);
@@ -188,6 +196,18 @@ export default function RoomScreen() {
   const memberList = members.status === "ready" ? members.data : null;
   const myAssignment = assignment.status === "ready" ? assignment.data : null;
   const autoAssign = useAutoAssign(roomData, memberList, uid);
+  // 미션 수행 중일 때만 시작 시각을 읽는다. (노을 배경으로 바꿀 시점 계산용)
+  const missionStart = useMissionStart(
+    roomId,
+    uid,
+    roomData?.phase === "play" || roomData?.phase === "waitResult",
+  );
+  // 방장이 시상식(결과 공개)을 시작한 뒤에 링크로 다시 들어오면 바로 결과 화면으로 보낸다.
+  // 결과 화면은 시상식을 따라가다가, 끝났으면 이미지 저장 화면을 보여준다.
+  const awardStarted = roomData?.awardIndex !== undefined;
+  useEffect(() => {
+    if (awardStarted) router.replace(ROUTES.result(roomId));
+  }, [awardStarted, roomId, router]);
   const [missionOpened, markMissionOpened] = useMissionOpened(
     myAssignment ? `pawpaw:mission-opened:${roomId}:${myAssignment.id}` : null,
   );
@@ -317,6 +337,19 @@ export default function RoomScreen() {
   // 미션이 공개된 뒤에는 제출한 친구만 놀이터(방)에 돌아와 있다. 나머지는 미션 중이다.
   const submitted = memberList.filter(({ player }) => player.submitted === true);
   const onPlayground = revealed ? submitted : memberList;
+
+  // 노을 배경: 미션 수행 중에 절반 이상이 제출했거나, 미션 시작부터 결과 공개(없으면 마감)까지의
+  // 시간이 절반 이상 흘렀으면 노을로 바꾼다. 결과가 열린 뒤에도 노을이다.
+  const missionStartMs =
+    missionStart.status === "ready" && missionStart.data ? Date.parse(missionStart.data) : null;
+  const missionEndMs = resultAtMs ?? (roomData.deadlineAt ? Date.parse(roomData.deadlineAt) : null);
+  const halfTimePassed =
+    missionStartMs !== null &&
+    missionEndMs !== null &&
+    missionEndMs > missionStartMs &&
+    now >= (missionStartMs + missionEndMs) / 2;
+  const halfSubmitted = memberList.length > 0 && submitted.length * 2 >= memberList.length;
+  const sunset = revealed && (resultOpen || halfSubmitted || halfTimePassed);
   const playgroundNotice = !started
     ? "친구들이 놀이터로 모이고 있어요."
     : revealed && onPlayground.length === 0
@@ -325,6 +358,8 @@ export default function RoomScreen() {
 
   return (
     <main className="relative mx-auto flex min-h-dvh w-full max-w-app flex-col gap-4 p-4 text-center">
+      {/* root layout의 낮 배경 위에 덮어 깐다. */}
+      {sunset && <SceneBackground scene="sunset" />}
       {/* 위쪽: 미션이 공개된 뒤에만 내 미션과 결과 공개 시각을 보여준다. 그 전에는 비워 둔다.
           버튼은 오른쪽 위에 세로로 놓고, 미션이 있으면 그 아래에 놓는다. 놀이터를 밀어내지 않도록 띄워 둔다. */}
         <Playground members={onPlayground} />

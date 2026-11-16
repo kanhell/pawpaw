@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { toBlob } from "html-to-image";
@@ -39,7 +40,7 @@ import {
   setShowcaseIndex,
 } from "../lib/firebase/roomRepo";
 import { countFor, judgmentState, type JudgmentCounts, type JudgmentState } from "../lib/judgment";
-import type { VoteCategory } from "@pawpaw/shared";
+import { ROUTES, type VoteCategory } from "@pawpaw/shared";
 import {
   RESULTS_NOT_OPEN,
   resultRepository,
@@ -62,25 +63,38 @@ function getFastestWinner(data: ResultData, failedIds: ReadonlySet<string>): Res
   return first ? data.players.find((p) => p.id === first.playerId) ?? null : null;
 }
 
-// 최다 득표자 (동점이면 먼저 제출한 사람)
-function getVoteWinner(data: ResultData, category: VoteCategory) {
+// 최다 득표자. 동점이면 ① 아직 상을 받지 않은 사람 ② 먼저 제출한 사람 순으로 고른다.
+// awardedIds: 이미 다른 상을 받기로 정해진 사람
+function getVoteWinner(
+  data: ResultData,
+  category: VoteCategory,
+  awardedIds: ReadonlySet<string> = new Set(),
+) {
   const counts: Record<string, number> = {};
   Object.values(data.votes[category]).forEach((t) => {
     counts[t] = (counts[t] ?? 0) + 1;
   });
   const submittedAt = (id: string) =>
     data.submissions.find((s) => s.playerId === id)?.submittedAt ?? Infinity;
+  const awarded = (id: string) => (awardedIds.has(id) ? 1 : 0);
   const top = Object.entries(counts).sort(
-    (a, b) => b[1] - a[1] || submittedAt(a[0]) - submittedAt(b[0])
+    (a, b) =>
+      b[1] - a[1] || awarded(a[0]) - awarded(b[0]) || submittedAt(a[0]) - submittedAt(b[0]),
   )[0];
   if (!top) return null;
   const player = data.players.find((p) => p.id === top[0]);
   return player ? { player, count: top[1] } : null;
 }
 
-// 모든 참가자가 두 투표를 모두 끝냈는지
-function isAllVoted(data: ResultData) {
-  return data.players.every((p) => data.votes.funny[p.id] && data.votes.hard[p.id]);
+// 두 투표를 모두 끝냈는지
+function hasVoted(data: ResultData, playerId: string) {
+  return Boolean(data.votes.funny[playerId] && data.votes.hard[playerId]);
+}
+
+// 투표할 수 있는 사람: 나를 빼고 고를 후보(사진을 냈고 미션에 실패하지 않은 친구)가 한 명이라도 있는 사람.
+// 나 말고 모두 실패했거나 사진을 안 냈으면 투표를 건너뛰므로, 기다릴 사람에서도 뺀다.
+function getVoters(data: ResultData, eligibleIds: ReadonlySet<string>) {
+  return data.players.filter((p) => [...eligibleIds].some((id) => id !== p.id));
 }
 
 // ---------- 미션 사진 ----------
@@ -1026,9 +1040,35 @@ export default function ResultScreen() {
     };
   }, [fetchResult]);
 
+  // 나를 빼고 투표할 후보(사진을 냈고 미션에 실패하지 않은 친구)가 없으면 투표를 건너뛴다.
+  const noCandidates = useMemo(
+    () =>
+      data !== null &&
+      !data.players.some(
+        (p) =>
+          p.id !== data.me &&
+          !failedIds.has(p.id) &&
+          data.submissions.some((s) => s.playerId === p.id),
+      ),
+    [data, failedIds],
+  );
+  // 미션 구경이 끝났는지 (방 정보를 못 읽으면 구경 없이 바로 투표한다)
+  const roomNow = room.status === "ready" ? room.data : null;
+  const showcaseDone =
+    roomNow === null ||
+    (data !== null &&
+      (roomNow.showcaseIndex ?? -1) >=
+        data.players.filter((p) => data.submissions.some((s) => s.playerId === p.id)).length);
+  // 방장이 이미 시상식(결과 공개)을 시작했으면(awardStarted), 투표하지 않았더라도 투표는 끝난 것으로 보고
+  // 시상식을 따라간다. (결과 공개 뒤에 링크로 다시 들어오면 시상식이 끝난 경우 바로 이미지 저장 화면이 보인다)
+  // 투표를 건너뛴 사람은 대기 화면을 본다.
+  const waitingForVotes =
+    phase === "waiting" ||
+    (phase.startsWith("vote") && showcaseDone && (noCandidates || awardStarted));
+
   // 대기 화면에서는 3초마다 다시 불러와서 "전원 투표 완료"를 확인
   useEffect(() => {
-    if (phase !== "waiting") return;
+    if (!waitingForVotes) return;
     let cancelled = false;
     const t = setInterval(() => {
       fetchResult().then((r) => {
@@ -1039,13 +1079,16 @@ export default function ResultScreen() {
       cancelled = true;
       clearInterval(t);
     };
-  }, [phase, fetchResult]);
+  }, [waitingForVotes, fetchResult]);
 
   const revealList = useMemo(() => {
     if (!data) return [];
-    const funny = getVoteWinner(data, "funny");
+    // 동점이면 상을 아직 받지 않은 사람에게 주므로, 투표와 상관없는 '빠른' 상부터 정한다.
     const fastest = getFastestWinner(data, failedIds);
-    const hard = getVoteWinner(data, "hard");
+    const awarded = new Set(fastest ? [fastest.id] : []);
+    const funny = getVoteWinner(data, "funny", awarded);
+    if (funny) awarded.add(funny.player.id);
+    const hard = getVoteWinner(data, "hard", awarded);
     // 발표 순서: 웃긴 → 빠른 → 어려운
     return [
       // short: 결과 카드에서 미션 앞에 붙이는 짧은 이름
@@ -1303,17 +1346,16 @@ export default function ResultScreen() {
     );
   }
 
-  const candidates = data.players.filter(
-    (p) => p.id !== data.me && submittedIds.has(p.id) && !failedIds.has(p.id),
+  // 투표 후보: 사진을 냈고 미션에 실패하지 않은 친구 (나는 빼고)
+  const eligibleIds = new Set(
+    data.players.filter((p) => submittedIds.has(p.id) && !failedIds.has(p.id)).map((p) => p.id),
   );
-  if (candidates.length === 0 && phase.startsWith("vote")) {
-    return (
-      <main className={shell}>
-        <BlurBackdrop />
-        <p className="text-gray-600">투표할 친구가 아직 없어요.</p>
-      </main>
-    );
-  }
+  const candidates = data.players.filter((p) => p.id !== data.me && eligibleIds.has(p.id));
+  // 고를 친구가 없으면 투표를 건너뛰고 바로 결과 공개를 기다린다. (candidates.length === 0과 같다)
+  const skipVote = noCandidates;
+  const myPhase: Phase = waitingForVotes ? "waiting" : phase;
+  // 상 받은 친구가 없으면(모두 실패 등) 결과 카드는 전체 미션으로 보여준다.
+  const shownCardView = revealList.length === 0 ? "all" : cardView;
 
   // 결과 카드에 찍는 날짜: 결과가 열린 날. 없으면 마지막으로 사진을 낸 날. (예: 2026.11.15)
   const resultDateMs =
@@ -1330,7 +1372,7 @@ export default function ResultScreen() {
   // 결과 카드에 넣을 사진들: 수상작은 상 순서대로, 전체 미션은 사진을 낸 친구 모두(받은 상이 있으면 이름표로)
   const findSubmission = (playerId: string) => data.submissions.find((sub) => sub.playerId === playerId);
   const cardItems: StripItem[] =
-    cardView === "awards"
+    shownCardView === "awards"
       ? revealList.map((r) => ({
           key: r.title,
           player: r.winner,
@@ -1349,23 +1391,24 @@ export default function ResultScreen() {
   // 전체 미션이 많으면 앞쪽 반과 뒤쪽 반으로 나눠 두 줄로 놓는다.
   const half = Math.ceil(cardItems.length / 2);
   const strips =
-    cardView === "all" && cardItems.length >= SPLIT_STRIP_FROM
+    shownCardView === "all" && cardItems.length >= SPLIT_STRIP_FROM
       ? [cardItems.slice(0, half), cardItems.slice(half)]
       : [cardItems];
   const split = strips.length > 1;
   const shownLayout: SaveStyle = split ? "pair" : layout; // 두 줄이면 두 장 나란히로 고정
 
-  const allVoted = isAllVoted(data);
-  const votedCount = data.players.filter((p) => data.votes.funny[p.id] && data.votes.hard[p.id]).length;
+  const voters = getVoters(data, eligibleIds);
+  const votedCount = voters.filter((p) => hasVoted(data, p.id)).length;
+  const allVoted = votedCount === voters.length;
 
   // 시상식은 다 같이 본다: 투표를 마친 뒤에는 방의 awardIndex를 따라간다. 방장만 넘긴다.
   // (방 정보를 못 읽으면 예전처럼 각자 넘긴다. '발표 다시 보기'도 각자)
   const synced = roomInfo !== null && !replaying;
   const amHost = roomInfo?.hostId === data.me;
   const awardIndex = roomInfo?.awardIndex;
-  let viewPhase: Phase = phase;
+  let viewPhase: Phase = myPhase;
   let viewIndex = revealIndex;
-  if (synced && (phase === "waiting" || phase === "reveal" || phase === "share")) {
+  if (synced && (myPhase === "waiting" || myPhase === "reveal" || myPhase === "share")) {
     if (awardIndex === undefined) viewPhase = "waiting";
     else if (awardIndex < revealList.length) {
       viewPhase = "reveal";
@@ -1383,7 +1426,8 @@ export default function ResultScreen() {
     }
   };
   const startReveal = () => {
-    if (!synced) setPhase("reveal");
+    // 상 받은 친구가 없으면 시상식 없이 결과 카드로 간다. (함께 볼 때는 awardIndex 0이 곧 공유 단계)
+    if (!synced) setPhase(revealList.length === 0 ? "share" : "reveal");
     else if (allVoted) void changeAward(0);
     else setConfirmReveal(true);
   };
@@ -1392,7 +1436,7 @@ export default function ResultScreen() {
     <main className={`${shell} overflow-hidden`}>
       <BlurBackdrop />
       <AnimatePresence mode="wait">
-        {phase === "voteFunny" && (
+        {myPhase === "voteFunny" && (
           <VoteScreen
             key="voteFunny"
             category="funny"
@@ -1403,7 +1447,7 @@ export default function ResultScreen() {
           />
         )}
 
-        {phase === "voteHard" && (
+        {myPhase === "voteHard" && (
           <VoteScreen
             key="voteHard"
             category="hard"
@@ -1423,11 +1467,18 @@ export default function ResultScreen() {
             className="flex flex-col items-center gap-6"
           >
             <div className="text-7xl">✉️</div>
-            <h1 className="text-3xl font-bold">투표 완료!</h1>
+            <h1 className="text-3xl font-bold">{skipVote ? "투표할 친구가 없어요" : "투표 완료!"}</h1>
+            {skipVote && (
+              <p className="text-sm text-gray-500">
+                미션을 인정받은 친구가 없어서 투표를 건너뛰었어요.
+              </p>
+            )}
             <p className="text-gray-600">
               {allVoted
-                ? "모두 투표를 마쳤어요"
-                : `친구들을 기다리는 중... (${votedCount} / ${data.players.length}명)`}
+                ? voters.length === 0
+                  ? "결과를 공개할 수 있어요"
+                  : "모두 투표를 마쳤어요"
+                : `친구들을 기다리는 중... (${votedCount} / ${voters.length}명)`}
             </p>
             {!synced || amHost ? (
               <button
@@ -1462,27 +1513,29 @@ export default function ResultScreen() {
             animate={{ opacity: 1, scale: 1 }}
             className="flex w-full flex-col items-center gap-4"
           >
-            {/* 보기 고르기: 상 받은 미션만 / 모든 친구의 미션 */}
-            <div role="tablist" aria-label="결과 카드 보기" className="flex rounded-full bg-surface/70 p-1 shadow-card">
-              {(
-                [
-                  ["awards", "수상작"],
-                  ["all", "전체 미션"],
-                ] as const
-              ).map(([view, label]) => (
-                <button
-                  key={view}
-                  role="tab"
-                  aria-selected={cardView === view}
-                  onClick={() => setCardView(view)}
-                  className={`rounded-full px-4 py-1.5 text-sm font-bold active:scale-95 ${
-                    cardView === view ? "bg-ink text-canvas" : "text-ink-muted"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* 보기 고르기: 상 받은 미션만 / 모든 친구의 미션. 상 받은 친구가 없으면 고를 것 없이 전체 미션만. */}
+            {revealList.length > 0 && (
+              <div role="tablist" aria-label="결과 카드 보기" className="flex rounded-full bg-surface/70 p-1 shadow-card">
+                {(
+                  [
+                    ["awards", "수상작"],
+                    ["all", "전체 미션"],
+                  ] as const
+                ).map(([view, label]) => (
+                  <button
+                    key={view}
+                    role="tab"
+                    aria-selected={shownCardView === view}
+                    onClick={() => setCardView(view)}
+                    className={`rounded-full px-4 py-1.5 text-sm font-bold active:scale-95 ${
+                      shownCardView === view ? "bg-ink text-canvas" : "text-ink-muted"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* 액자 색(검정 / 베이지)과 저장 레이아웃(카드만 / 한 장 / 두 장)을 한 줄에 */}
             <div className="flex items-center gap-4">
               <div role="radiogroup" aria-label="액자 색" className="flex items-center gap-3">
@@ -1518,6 +1571,12 @@ export default function ResultScreen() {
             >
               {saving ? "이미지 만드는 중..." : "이미지 저장"}
             </button>
+            <Link
+              href={ROUTES.roomNew}
+              className="rounded-full bg-surface px-8 py-3 font-bold text-ink shadow-card active:scale-95"
+            >
+              새 게임 시작
+            </Link>
             <button onClick={replay} className="text-sm text-gray-500 underline">
               발표 다시 보기
             </button>
@@ -1527,7 +1586,7 @@ export default function ResultScreen() {
       {confirmReveal && (
         <Popup title="그래도 공개할까요?" onClose={() => setConfirmReveal(false)}>
           <p className="text-sm text-ink-muted">
-            아직 {data.players.length - votedCount}명이 투표하지 않았어요. 공개하면 지금까지의 투표로 시상해요.
+            아직 {voters.length - votedCount}명이 투표하지 않았어요. 공개하면 지금까지의 투표로 시상해요.
           </p>
           <ChoiceButtons
             cancelLabel="기다리기"

@@ -9,6 +9,7 @@ import {
   loadPhoto,
   subscribeLatestInvite,
   subscribeMembers,
+  subscribeMissionStart,
   subscribeMyAssignment,
   subscribeMySubmission,
   subscribeRoom,
@@ -70,6 +71,17 @@ function useSubscription<T>(
 export function useRoom(roomId: string, uid: string | null): Loadable<Room | null> {
   return useSubscription(uid ? `room:${roomId}:${uid}` : null, (onData, onError) =>
     subscribeRoom(roomId, onData, onError),
+  );
+}
+
+/** 미션 수행이 시작된 시각(ISO). enabled가 false면(미션 공개 전) 읽지 않는다. */
+export function useMissionStart(
+  roomId: string,
+  uid: string | null,
+  enabled: boolean,
+): Loadable<string | null> {
+  return useSubscription(uid && enabled ? `missionStart:${roomId}:${uid}` : null, (onData, onError) =>
+    subscribeMissionStart(roomId, onData, onError),
   );
 }
 
