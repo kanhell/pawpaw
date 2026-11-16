@@ -53,19 +53,22 @@ export default function Popup({ title, onClose, action, children }: PopupProps) 
             onClick={(event) => event.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="relative flex max-h-full w-full max-w-[26rem] flex-col items-center gap-4 overflow-y-auto rounded-sheet bg-canvas p-5 text-center shadow-float"
+            className="relative flex max-h-full w-full max-w-[26rem] flex-col overflow-hidden rounded-sheet bg-canvas text-center shadow-float"
           >
-            <h2 className="px-8 text-xl font-bold">{title}</h2>
+            {/* 내용이 길면 안쪽만 스크롤하고, 닫기 버튼은 카드 오른쪽 위에 고정한다. */}
+            <div className="flex min-h-0 flex-col items-center gap-4 overflow-y-auto p-5">
+              <h2 className="px-8 text-xl font-bold">{title}</h2>
+              {children}
+            </div>
             {onClose && (
               <button
                 onClick={onClose}
                 aria-label="닫기"
-                className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-ink-subtle active:scale-95"
+                className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-canvas/90 text-ink-subtle active:scale-95"
               >
                 ✕
               </button>
             )}
-            {children}
           </motion.section>
         </div>
         {action && (
