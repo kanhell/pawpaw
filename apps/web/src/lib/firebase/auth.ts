@@ -48,6 +48,28 @@ function start() {
 }
 
 /**
+ * 로그인이 끝날 때까지 기다렸다가 uid를 돌려준다. 아직 시작 전이면 로그인을 시작한다.
+ * (화면은 먼저 보여 주고, 사용자가 버튼을 눌렀을 때만 로그인 완료를 기다릴 때 쓴다)
+ */
+export function waitForSignIn(): Promise<string> {
+  start();
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      const current = state;
+      if (current.status === "signedIn") {
+        listeners.delete(check);
+        resolve(current.uid);
+      } else if (current.status === "error") {
+        listeners.delete(check);
+        reject(new Error(current.message));
+      }
+    };
+    listeners.add(check);
+    check();
+  });
+}
+
+/**
  * 현재 로그인 상태. uid는 Firebase Auth의 uid이며 User.id와 같다.
  * enabled가 false인 동안에는 로그인을 시작하지 않는다.
  * (인앱 브라우저에서 불필요한 익명 계정이 만들어지는 것을 막을 때 쓴다)

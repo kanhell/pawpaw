@@ -7,10 +7,10 @@ import ErrorView from "../components/ErrorView";
 import ProfileFields from "../components/ProfileFields";
 import ScreenShell from "../components/ScreenShell";
 import { ANIMALS } from "../lib/animals";
-import { useAuthState } from "../lib/firebase/auth";
+import { useAuthState, waitForSignIn } from "../lib/firebase/auth";
 import { describeError } from "../lib/firebase/errors";
 import { useMembership, useTakenAnimals } from "../lib/firebase/hooks";
-import { isAnimalTaken, joinRoom } from "../lib/firebase/roomRepo";
+import { checkMembership, isAnimalTaken, joinRoom } from "../lib/firebase/roomRepo";
 import { isValidInviteCode } from "../lib/invite/code";
 import { manualOpenGuide, planExternalOpen } from "../lib/invite/inAppBrowser";
 import { useBrowserInfo } from "../lib/invite/useBrowserInfo";
@@ -77,7 +77,6 @@ export default function InviteScreen() {
   }
 
   async function handleJoin() {
-    if (!uid) return;
     const name = nickname.trim();
     if (!name) {
       setError("닉네임을 입력해 주세요.");
@@ -90,7 +89,17 @@ export default function InviteScreen() {
     setError(null);
     setBusy(true);
     try {
-      await joinRoom(uid, roomId, code, { nickname: name, animal });
+      // 로그인은 화면을 띄운 뒤 뒤에서 진행된다. 아직 안 끝났으면 여기서 기다린다.
+      const myUid = uid ?? (await waitForSignIn());
+      const isMember =
+        uid === myUid && membership.status === "ready"
+          ? membership.data
+          : await checkMembership(roomId, myUid);
+      if (isMember) {
+        router.replace(ROUTES.room(roomId));
+        return;
+      }
+      await joinRoom(myUid, roomId, code, { nickname: name, animal });
       router.replace(ROUTES.room(roomId));
     } catch (e) {
       const errorCode = (e as { code?: string }).code ?? "";
@@ -152,17 +161,10 @@ export default function InviteScreen() {
   if (auth.status === "error") {
     return <ErrorView message="로그인하지 못했어요." detail={auth.message} />;
   }
-  if (auth.status === "loading" || membership.status === "loading") {
-    return (
-      <ScreenShell>
-        <p className="text-ink-muted">불러오는 중…</p>
-      </ScreenShell>
-    );
-  }
   if (membership.status === "error") {
     return <ErrorView message={membership.message} />;
   }
-  if (membership.data) {
+  if (membership.status === "ready" && membership.data) {
     return (
       <ScreenShell>
         <p className="text-ink-muted">방으로 이동하는 중…</p>
