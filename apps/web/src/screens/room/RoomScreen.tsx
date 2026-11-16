@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import Playground from "../../components/Playground";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { MIN_PLAYERS, ROUTES, type Room } from "@pawpaw/shared";
@@ -339,6 +340,7 @@ export default function RoomScreen() {
     <main className="relative mx-auto flex min-h-dvh w-full max-w-app flex-col gap-4 p-4 text-center">
       {/* 위쪽: 미션이 공개된 뒤에만 내 미션과 결과 공개 시각을 보여준다. 그 전에는 비워 둔다.
           버튼은 오른쪽 위에 세로로 놓고, 미션이 있으면 그 아래에 놓는다. 놀이터를 밀어내지 않도록 띄워 둔다. */}
+        <Playground members={onPlayground} />
       <div className="relative z-10">
         {showMission ? (
           <header>
@@ -392,17 +394,14 @@ export default function RoomScreen() {
       {playgroundNotice ? (
         <>
           <div className="flex-1" />
-          <div className="pointer-events-none absolute inset-x-4 top-1/2 -mt-[18px] flex flex-col items-center gap-4">
+          <div className="pointer-events-none absolute inset-x-4 top-1/2 -mt-[18px] flex flex-col items-center">
             <p className="rounded-full bg-surface/90 px-4 py-2 text-sm text-ink-muted shadow-card">
               {playgroundNotice}
             </p>
-            <PlaygroundAnimals members={onPlayground} />
           </div>
         </>
       ) : (
-        <div className="flex flex-1 items-center justify-center">
-          <PlaygroundAnimals members={onPlayground} />
-        </div>
+        <div className="flex-1" />
       )}
 
       {/* 아래쪽: 버튼 */}
