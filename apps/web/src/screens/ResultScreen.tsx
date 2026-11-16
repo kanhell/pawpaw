@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { toBlob } from "html-to-image";
 import ErrorView from "../components/ErrorView";
+import AnimalImage from "../components/AnimalImage";
+import MemberLabel from "../components/MemberLabel";
 import { BlurBackdrop } from "../components/ScreenShell";
 import { useAuthState } from "../lib/firebase/auth";
 import BottomButton from "../components/BottomButton";
@@ -158,16 +160,17 @@ function ShowcaseLobby({
             {enteredCount} / {players.length}명이 들어왔어요
           </p>
           {/* 들어온 친구는 선명하게, 아직인 친구는 흐리게 */}
-          <ul className="mt-4 flex flex-wrap justify-center gap-3 text-4xl">
+          <ul className="mt-4 flex flex-wrap justify-center gap-3">
             {players.map((p) => {
               const entered = enteredIds.has(p.id);
               return (
-                <li
-                  key={p.id}
-                  title={p.nickname}
-                  className={entered ? "" : "opacity-30 grayscale"}
-                >
-                  {p.emoji}
+                <li key={p.id} className={entered ? "" : "opacity-30 grayscale"}>
+                  <MemberLabel
+                    animal={p.animal}
+                    nickname={p.nickname}
+                    layout="column"
+                    faceClassName="size-14 bg-canvas"
+                  />
                   <span className="sr-only">{entered ? " 들어왔어요" : " 아직이에요"}</span>
                 </li>
               );
@@ -265,8 +268,12 @@ function ShowcaseStage({
         <p className="text-sm text-gray-500">
           미션 구경 {index + 1} / {total}
         </p>
-        <h2 className="text-2xl font-bold">
-          {player.emoji} {player.nickname}
+        <h2 className="max-w-full text-2xl font-bold">
+          <MemberLabel
+            animal={player.animal}
+            nickname={player.nickname}
+            faceClassName="size-12 bg-surface"
+          />
         </h2>
         <div className="w-full overflow-hidden rounded-3xl bg-white shadow">
           <p className="p-4 text-lg font-bold">{player.mission ?? "미션을 불러오지 못했어요"}</p>
@@ -369,8 +376,8 @@ function JudgePopup({
   return (
     <BottomSheet title="이 미션을 인정할까요?">
       <div className="w-full rounded-sheet bg-surface p-4 shadow-card">
-        <p className="text-lg font-bold">
-          {player.emoji} {player.nickname}
+        <p className="text-lg">
+          <MemberLabel animal={player.animal} nickname={player.nickname} />
         </p>
         <p className="mt-2">{player.mission ?? "미션을 불러오지 못했어요"}</p>
       </div>
@@ -422,8 +429,13 @@ function CandidateCard({
     >
       <MissionPhoto player={player} submission={submission} />
       <div className="flex flex-col gap-1 p-3">
-        <p className="text-sm font-bold">
-          {player.emoji} {player.nickname}
+        <p className="text-sm">
+          <MemberLabel
+            animal={player.animal}
+            nickname={player.nickname}
+            faceClassName="size-8 bg-canvas"
+            className="gap-2"
+          />
         </p>
         <p className="text-xs text-gray-600">{player.mission ?? "미션을 불러오지 못했어요"}</p>
       </div>
@@ -527,9 +539,8 @@ function RevealStage({
             initial={{ scale: 0, rotate: -20 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 12 }}
-            className="text-9xl"
           >
-            {winner.emoji}
+            <AnimalImage animal={winner.animal} className="size-32 bg-surface shadow-card" />
           </motion.div>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -626,9 +637,9 @@ function ResultStrip({
           <div className="relative w-full overflow-hidden">
             <MissionPhoto player={item.player} submission={item.submission} fit="frame" />
             {/* 사진 오른쪽 아래에 캐릭터를 시그니처처럼 */}
-            <p className="absolute bottom-2 right-2 text-3xl drop-shadow" aria-hidden="true">
-              {item.player.emoji}
-            </p>
+            <span className="absolute bottom-2 right-2 drop-shadow" aria-hidden="true">
+              <AnimalImage animal={item.player.animal} className="size-10 bg-canvas" />
+            </span>
           </div>
           {/* 사진 아래: 왼쪽에 이름표와 미션, 오른쪽에 닉네임 */}
           <div className="flex items-center justify-between gap-2 pt-1.5 text-xs">

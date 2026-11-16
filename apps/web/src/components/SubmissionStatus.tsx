@@ -1,4 +1,5 @@
 import type { MemberProfile } from "../lib/firebase/roomRepo";
+import MemberLabel from "./MemberLabel";
 
 // 미션을 '미리 전체 공개'로 정한 방에서 멤버 이름 아래에 보여줄 미션. 키는 받는 사람 id.
 export interface MemberMission {
@@ -42,13 +43,14 @@ export default function SubmissionStatus({ profiles, missions }: SubmissionStatu
               key={player.id}
               className="flex items-center justify-between gap-3 rounded-card bg-canvas px-4 py-3"
             >
-              <div className="min-w-0">
-                <p className="font-bold">
-                  {player.animal} {nickname}
-                  {player.isHost ? " 👑" : ""}
-                </p>
-                {mission && <p className="mt-1 text-sm">{mission.text}</p>}
-              </div>
+              <MemberLabel
+                animal={player.animal}
+                nickname={nickname}
+                isHost={player.isHost}
+                faceClassName="size-10 bg-surface"
+              >
+                {mission && <span className="mt-1 text-sm">{mission.text}</span>}
+              </MemberLabel>
               {/* 상태는 아이콘 없이 글자 색으로 구분한다: 제출함(초록) / 아직(회색) */}
               <span
                 className={`shrink-0 text-sm ${submitted ? "font-bold text-success" : "text-ink-subtle"}`}

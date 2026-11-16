@@ -166,19 +166,6 @@ function RoundButton({
   );
 }
 
-// 놀이터에 있는 친구들. 이름은 멤버 버튼에서 보고, 여기서는 동물만 보여준다.
-function PlaygroundAnimals({ members }: { members: MemberProfile[] }) {
-  return (
-    <ul className="pointer-events-auto flex flex-wrap justify-center gap-4">
-      {members.map(({ player, nickname }) => (
-        <li key={player.id} title={nickname} className="text-5xl drop-shadow">
-          {player.animal}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 // 방(= 대기실). 배경은 선명하게 두고, 단계(phase)에 맞는 팝업을 띄운다.
 // - 게임 시작 전: 초대(방장) / 참여 멤버 / 게임 시작(방장)
 // - 게임 설정 → 미션 설정(서로 정해주기) 또는 자동 뽑기(앱이 정해주기) → 미션 도착

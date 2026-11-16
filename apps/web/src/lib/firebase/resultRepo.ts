@@ -13,7 +13,7 @@ import { subscribeMembers, type MemberProfile } from "./roomRepo";
 
 // ---------- 결과 화면용 타입 (저장 모델이 아니라 화면에서 쓰기 좋게 모은 형태) ----------
 // mission: 이 친구가 받은 미션 본문 (투표할 때 사진과 함께 보여준다)
-export type ResultPlayer = { id: string; nickname: string; emoji: string; mission?: string };
+export type ResultPlayer = { id: string; nickname: string; animal: string; mission?: string }; // animal: 동물 id (lib/animals)
 // photoPath: Storage의 인증 사진 경로. 결과가 열린 뒤에는 같은 방 멤버가 읽을 수 있다.
 export type ResultSubmission = { playerId: string; submittedAt: number; photoPath?: string };
 // { funny: { 투표한사람id: 고른사람id }, hard: { ... } }
@@ -95,7 +95,7 @@ const firebaseResultRepository: ResultRepository = {
       const players = members.map((m) => ({
         id: m.player.id, // Firebase Auth uid
         nickname: m.nickname,
-        emoji: m.player.animal, // 지금은 이모지. 캐릭터 이미지로 바뀌면 여기만 교체
+        animal: m.player.animal,
         mission: missionOf.get(m.player.id),
       }));
 
@@ -146,20 +146,21 @@ const firebaseResultRepository: ResultRepository = {
 // mock 구현 (서버 없이 화면만 테스트할 때)
 // =====================================================
 const MOCK_PLAYER_COUNT = 7; // 이 숫자만 바꿔서 인원 수 테스트 (제한 없음)
+// 닉네임과 동물 id. 동물은 lib/animals에 있는 10종을 쓴다.
 const NAMES: [string, string][] = [
-  ["토끼", "🐰"], ["코알라", "🐨"], ["여우", "🦊"], ["곰", "🐻"],
-  ["펭귄", "🐧"], ["판다", "🐼"], ["호랑이", "🐯"], ["고양이", "🐱"],
-  ["강아지", "🐶"], ["개구리", "🐸"], ["사자", "🦁"], ["돼지", "🐷"],
+  ["다람이", "squirrel"], ["오리", "duck"], ["여우", "fox"], ["냥이", "cat"],
+  ["멍멍", "dog"], ["펭귄", "penguin"], ["사슴", "deer"], ["호랑이", "tiger"],
+  ["판다", "panda"], ["꿀꿀", "pig"],
 ];
 const BASE = 1_700_000_000_000;
 
 function createMockStore(): ResultData {
   const players = Array.from({ length: MOCK_PLAYER_COUNT }, (_, i) => {
-    const [nickname, emoji] = NAMES[i % NAMES.length];
+    const [nickname, animal] = NAMES[i % NAMES.length];
     return {
       id: `p${i + 1}`,
       nickname: i < NAMES.length ? nickname : `${nickname}${Math.floor(i / NAMES.length) + 1}`,
-      emoji,
+      animal,
       mission: ["하늘 사진 찍기", "가장 웃긴 표정 짓기", "초록색 물건 찾기"][i % 3],
     };
   });

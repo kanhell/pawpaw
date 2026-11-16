@@ -1,6 +1,7 @@
 "use client";
 
 import type { Room } from "@pawpaw/shared";
+import MemberLabel from "../../components/MemberLabel";
 import Popup from "../../components/Popup";
 import SubmissionStatus, { type MemberMission } from "../../components/SubmissionStatus";
 import { useRoomAssignments } from "../../lib/firebase/hooks";
@@ -52,12 +53,8 @@ export default function MembersPopup({
       ) : (
         <ul className="w-full space-y-2">
           {members.map(({ player, nickname }) => (
-            <li
-              key={player.id}
-              className="rounded-card bg-surface px-4 py-3 text-left font-bold shadow-card"
-            >
-              {player.animal} {nickname}
-              {player.isHost ? " 👑" : ""}
+            <li key={player.id} className="rounded-card bg-surface px-4 py-3 shadow-card">
+              <MemberLabel animal={player.animal} nickname={nickname} isHost={player.isHost} />
             </li>
           ))}
         </ul>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Room } from "@pawpaw/shared";
 import BottomButton from "../../components/BottomButton";
+import MemberLabel from "../../components/MemberLabel";
 import Popup from "../../components/Popup";
 import { describeError } from "../../lib/firebase/errors";
 import {
@@ -45,10 +46,11 @@ export default function MissionSetPopup({
     scope === "same" ? hostDone : ordered.length > 0 && doneCount === ordered.length;
   const target = receiverOf(ordered, uid);
   const targetProfile = target ? byId.get(target.id) : undefined;
+  // 제목에는 닉네임만 쓰고, 얼굴은 입력칸 위에 MemberLabel로 보여준다.
   const targetLabel = targetProfile
     ? target?.id === uid
       ? "나"
-      : `${targetProfile.player.animal} ${targetProfile.nickname}`
+      : targetProfile.nickname
     : "친구";
   // 보내기 버튼에 쓰는 받는 사람 이름. 버튼이 커지지 않도록 동물은 빼고 닉네임만 쓴다.
   const sendTo =
@@ -128,6 +130,14 @@ export default function MissionSetPopup({
     >
       {canType && (
         <div className="flex w-full flex-col items-center gap-3">
+          {scope === "different" && targetProfile && (
+            <MemberLabel
+              animal={targetProfile.player.animal}
+              nickname={target?.id === uid ? "나" : targetProfile.nickname}
+              faceClassName="size-12 bg-surface"
+              className="max-w-full rounded-full bg-surface py-1 pl-1 pr-4 shadow-card"
+            />
+          )}
           <input
             value={text}
             onChange={(event) => setText(event.target.value)}
